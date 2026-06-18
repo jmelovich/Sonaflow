@@ -1,0 +1,47 @@
+# The visualizer runs INSIDE the StreamDiffusion Poetry venv, which already
+# provides: torch (cu128), streamdiffusion, diffusers, transformers, numpy, Pillow.
+# Only the extra packages this project needs on top of that env are listed here.
+#
+# Install into the StreamDiffusion venv:
+#   cd H:\_dev\StreamDiffusion
+#   poetry run pip install -r H:\_dev\StableDiffusionVisualizer\music_visualizer\requirements.txt
+
+# --- Milestone 1: realtime generation + window + prompt injection ---
+# Pin numpy<2: onnxruntime (TensorRT engine builds) is compiled against NumPy 1.x.
+# Pin opencv<4.12: newer opencv-python requires numpy>=2.
+numpy==1.26.4
+opencv-python>=4.9.0,<4.12
+
+# --- Milestone 2: realtime audio analysis (aubio) -> reactive motion ---
+# aubio 0.4.9 builds against numpy 1.x (matches the pin above). On Windows/cp310
+# there is no prebuilt wheel, so pip builds from source (needs a C compiler).
+# Fallback if that fails: build from the local checkout ->
+#   poetry run pip install H:\_dev\aubio
+aubio>=0.4.9
+sounddevice>=0.4.6     # realtime output (file playback) + input (mic)
+soundfile>=0.12.1      # audio file loading
+# System-audio capture (--audio-source loopback). Stock sounddevice wheels lack
+# WASAPI loopback, so we use PyAudioWPatch (prebuilt Windows wheels) for it.
+PyAudioWPatch>=0.2.12; sys_platform == "win32"
+
+# --- Milestone 3: CLAP audio -> auto prompt injection ---
+# CLAP runs via the in-env `transformers` (ClapModel + AutoProcessor), pulling
+# `laion/larger_clap_music` from the HuggingFace hub on first use. Audio windows
+# are resampled to 48 kHz with `torchaudio` (ships with the cu128 torch in the
+# env); a linear-interpolation fallback is used if torchaudio is missing.
+# compel encodes confidence-weighted tags like "(neon city)1.2" into embeddings
+# (StreamDiffusion's plain CLIP tokenizer can't parse the weight syntax itself).
+# IMPORTANT: pin compel < 2.1 -- compel 2.1+ requires transformers>=5, which is
+# incompatible with the env's diffusers 0.24 / transformers 4.36 (it breaks the
+# CLIP encode_prompt path and huggingface_hub). Install without deps so it can't
+# silently upgrade transformers:
+#   poetry run pip install --no-deps "compel==2.0.3" "pyparsing>=3.0"
+compel>=2.0.0,<2.1
+# torchaudio (48 kHz resampling for CLAP) is NOT bundled with the cu128 torch in
+# this env; install the matching build (a linear-interp fallback is used if absent):
+#   poetry run pip install --no-deps torchaudio==2.11.0 --index-url https://download.pytorch.org/whl/cu128
+# Optional vocabulary override: --clap-vocab path/to/vocab.json (flat string array).
+
+# --- Later milestones (captioning / upscaling) ---
+# bitsandbytes>=0.43.0   # Qwen2 lookahead captioning (4-bit)
+# RTX VSR: pip install -U --no-build-isolation nvidia-vfx --index-url https://pypi.nvidia.com

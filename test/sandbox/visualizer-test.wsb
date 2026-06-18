@@ -1,0 +1,20 @@
+<Configuration>
+  <!--
+    Windows Sandbox test config for setup.ps1 validation.
+    1. Edit HostFolder below to your local Sonaflow clone path.
+    2. Double-click this file (or: start visualizer-test.wsb).
+    3. Follow test/sandbox/CHECKLIST.md inside the sandbox.
+  -->
+  <vGPU>Enable</vGPU>
+  <MemoryInMB>16384</MemoryInMB>
+  <MappedFolders>
+    <MappedFolder>
+      <HostFolder>C:\path\to\Sonaflow</HostFolder>
+      <SandboxFolder>C:\repo</SandboxFolder>
+      <ReadOnly>true</ReadOnly>
+    </MappedFolder>
+  </MappedFolders>
+  <LogonCommand>
+    <Command>powershell -ExecutionPolicy Bypass -NoExit -Command "Copy-Item C:\repo C:\test -Recurse; Set-Location C:\test; Write-Host 'Sandbox ready. Working copy: C:\test' -ForegroundColor Green; Write-Host 'See test\sandbox\CHECKLIST.md' -ForegroundColor Cyan"</Command>
+  </LogonCommand>
+</Configuration>

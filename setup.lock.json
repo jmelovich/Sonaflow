@@ -1,0 +1,17 @@
+{
+  "streamdiffusion_repo": "https://github.com/jmelovich/StreamDiffusion.git",
+  "streamdiffusion_ref": "blackwell-tensorrt",
+  "streamdiffusion_notes": "Tested only on NVIDIA GeForce RTX 5080 (Blackwell) with TensorRT 10+ and PyTorch cu128. Other GPUs are unsupported for this branch.",
+  "streamdiffusion_upstream_repo": "https://github.com/cumulo-autumn/StreamDiffusion.git",
+  "streamdiffusion_upstream_ref": "main",
+  "torch_index": "cu128",
+  "torch_index_url": "https://download.pytorch.org/whl/cu128",
+  "torch_index_upstream": "cu121",
+  "torch_index_url_upstream": "https://download.pytorch.org/whl/cu121",
+  "numpy": "1.26.4",
+  "compel": "2.0.3",
+  "torchaudio": "2.11.0",
+  "sd_model": "stabilityai/sd-turbo",
+  "clap_model": "laion/larger_clap_music",
+  "qwen_model": "Qwen/Qwen2-Audio-7B-Instruct"
+}

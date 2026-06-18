@@ -1,0 +1,10 @@
+*.pyc
+/.venv-qwen
+visualizer_settings.json
+*.dll
+engines/
+.cursor/
+*.code-workspace
+ProjectOutline.md
+test/smoke-results/
+test/sandbox/logs/

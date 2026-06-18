@@ -1,0 +1,6 @@
+# Native build artifacts (rtxvsr_bridge is compiled on first use)
+*.dll
+*.lib
+*.exp
+*.obj
+*.pdb

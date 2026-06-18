@@ -1,0 +1,9 @@
+# Native build artifacts (glpresent_bridge is compiled on first use)
+*.dll
+*.lib
+*.exp
+*.obj
+*.pdb
+
+# Dear ImGui — cloned on first DLL build (see build_glpresent.py)
+imgui/

@@ -1,0 +1,33 @@
+<Configuration>
+  <!--
+    Automated sandbox test. Maps:
+      - Sonaflow (read-only) -> C:\repo
+      - StreamDiffusion fork (read-only) -> C:\StreamDiffusion  (avoids clone during test)
+      - logs (writable) -> C:\logs
+    Host paths are patched by test/sandbox/launch-sandbox-test.ps1 from your local clone.
+    After pushing an updated poetry.lock to jmelovich/blackwell-tensorrt, remove the StreamDiffusion
+    map to test the full git-clone path.
+  -->
+  <vGPU>Enable</vGPU>
+  <MemoryInMB>16384</MemoryInMB>
+  <MappedFolders>
+    <MappedFolder>
+      <HostFolder>__SONAFLOW_REPO__</HostFolder>
+      <SandboxFolder>C:\repo</SandboxFolder>
+      <ReadOnly>true</ReadOnly>
+    </MappedFolder>
+    <MappedFolder>
+      <HostFolder>__STREAMDIFFUSION_REPO__</HostFolder>
+      <SandboxFolder>C:\StreamDiffusion</SandboxFolder>
+      <ReadOnly>true</ReadOnly>
+    </MappedFolder>
+    <MappedFolder>
+      <HostFolder>__SANDBOX_LOG_DIR__</HostFolder>
+      <SandboxFolder>C:\logs</SandboxFolder>
+      <ReadOnly>false</ReadOnly>
+    </MappedFolder>
+  </MappedFolders>
+  <LogonCommand>
+    <Command>powershell -ExecutionPolicy Bypass -File C:\repo\test\sandbox\automated-test.ps1 -Profile Minimal</Command>
+  </LogonCommand>
+</Configuration>
