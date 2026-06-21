@@ -11,33 +11,31 @@ function Write-Err2  { param([string]$Msg) Write-Host "  [fail] $Msg" -Foregroun
 $script:DefaultStandalonePythonUrl =
     "https://github.com/astral-sh/python-build-standalone/releases/download/20241016/cpython-3.10.15+20241016-x86_64-pc-windows-msvc-install_only.tar.gz"
 
+function Get-ProjectRootFromTools {
+    return (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
+}
+
 function Get-SourceVenvPath {
     <#
-    .SYNOPSIS Resolve the working Poetry venv to harvest packages from.
+    .SYNOPSIS Resolve Sonaflow's working .venv to harvest packages from.
     #>
     param(
-        [string]$StreamDiffusionPath,
+        [string]$ProjectRoot,
         [string]$Explicit
     )
     if ($Explicit) {
         if (-not (Test-Path $Explicit)) { throw "Source venv not found: $Explicit" }
         return (Resolve-Path $Explicit).Path
     }
-    if (-not $StreamDiffusionPath) {
-        $StreamDiffusionPath = $env:STREAMDIFFUSION_PATH
+    if (-not $ProjectRoot) {
+        $ProjectRoot = Get-ProjectRootFromTools
     }
-    if (-not $StreamDiffusionPath -or -not (Test-Path $StreamDiffusionPath)) {
-        throw "Provide -SourceVenv or -StreamDiffusionPath (or set STREAMDIFFUSION_PATH) so the venv can be located."
+    $venv = Join-Path $ProjectRoot ".venv"
+    $python = Join-Path $venv "Scripts\python.exe"
+    if (-not (Test-Path $python)) {
+        throw "Sonaflow .venv not found at $venv. Run setup.ps1 first."
     }
-    Push-Location $StreamDiffusionPath
-    try {
-        $p = (& poetry env info -p) 2>$null
-        if ($LASTEXITCODE -ne 0 -or -not $p) {
-            throw "Could not resolve the Poetry venv in $StreamDiffusionPath. Run setup.ps1 first."
-        }
-        return $p.Trim()
-    }
-    finally { Pop-Location }
+    return (Resolve-Path $venv).Path
 }
 
 function Get-PythonMinor {

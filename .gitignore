@@ -14,3 +14,4 @@ installer/dist/
 installer/generated/
 installer/redist/
 __pycache__/
+/.venv

@@ -1,0 +1,9 @@
+Sonaflow includes vendored code from StreamDiffusion.
+
+StreamDiffusion
+Copyright StreamDiffusion contributors
+Licensed under the Apache License, Version 2.0
+See streamdiffusion/LICENSE
+
+Source: https://github.com/cumulo-autumn/StreamDiffusion
+Blackwell TensorRT 10 patches from: https://github.com/jmelovich/StreamDiffusion (blackwell-tensorrt branch)

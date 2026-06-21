@@ -6,8 +6,8 @@ The visualizer loads defaults from `visualizer_settings.json` in the repo root (
 
 | Field | Default | Notes |
 |-------|---------|-------|
-| `streamdiffusion_path` | `null` → auto-resolved | Sibling `../StreamDiffusion` or `$STREAMDIFFUSION_PATH`. Default clone is jmelovich `blackwell-tensorrt` (RTX 5080 only); use upstream cumulo-autumn for other GPUs — see [SETUP.md](./SETUP.md). |
-| `engine_dir` | `null` | TensorRT engines under `<streamdiffusion_path>/engines/{width}x{height}` |
+| `streamdiffusion_path` | `null` → vendored | Optional dev override: external checkout path or `$STREAMDIFFUSION_PATH` prepended to `sys.path`. Default uses repo-root `streamdiffusion/`. |
+| `engine_dir` | `null` | TensorRT engines under `engines/{width}x{height}` in repo root, or `%LOCALAPPDATA%\Sonaflow\engines` when packaged |
 | `qwen_python` | `null` | `.venv-qwen/Scripts/python.exe` (Windows) or `bin/python` (Linux) |
 | `rtx_video_sdk_path` | `null` | Falls back to `$NV_RTX_VIDEO_SDK` |
 

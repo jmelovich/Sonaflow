@@ -67,10 +67,11 @@ Settings persist in `visualizer_settings.json` (created by setup; gitignored). S
 
 ```
 Sonaflow/
-├── setup.ps1              # One-time developer setup
+├── setup.ps1              # One-time developer setup (.venv + pip)
 ├── doctor.ps1             # Health check
-├── run.ps1                # Launcher (StreamDiffusion Poetry venv)
-├── setup.lock.json        # Pinned fork URL, torch index, models
+├── run.ps1                # Launcher (Sonaflow .venv)
+├── setup.lock.json        # Pinned torch index URLs, models
+├── streamdiffusion/       # Vendored StreamDiffusion package (Apache 2.0)
 ├── music_visualizer/
 │   ├── main.py            # CLI, threading, orchestration
 │   ├── config.py          # Config dataclass
@@ -83,19 +84,23 @@ Sonaflow/
     └── SETUP.md           # Full install guide + troubleshooting
 ```
 
-## External dependency
+## StreamDiffusion (vendored)
 
-Runs inside the **StreamDiffusion Poetry venv**. By default `setup.ps1` clones the [jmelovich fork, `blackwell-tensorrt`](https://github.com/jmelovich/StreamDiffusion/tree/blackwell-tensorrt) to `../StreamDiffusion`.
+StreamDiffusion lives at `streamdiffusion/` in this repo (Apache 2.0 — see `NOTICE`).
+`setup.ps1` builds a single `.venv` with PyTorch + TensorRT 10; no sibling clone or Poetry.
 
-> **Tested only on NVIDIA GeForce RTX 5080 (Blackwell)** with TensorRT 10+ and PyTorch cu128. Other GPUs: use `.\setup.ps1 -UseUpstreamStreamDiffusion` for [cumulo-autumn/StreamDiffusion](https://github.com/cumulo-autumn/StreamDiffusion), or see [`docs/SETUP.md`](./docs/SETUP.md) for manual install.
+```powershell
+.\setup.ps1              # Auto CUDA profile (cu128 on Blackwell, cu121 otherwise)
+.\setup.ps1 -Cuda cu121  # RTX 30/40 or cu121 experiment on RTX 5080
+```
 
-Override checkout with `$env:STREAMDIFFUSION_PATH`, `-StreamDiffusionRepo`, or `--streamdiffusion-path`. Fork install details: [INSTALL-WIN-RTX50.md](https://github.com/jmelovich/StreamDiffusion/blob/blackwell-tensorrt/docs/INSTALL-WIN-RTX50.md).
+Optional: point `$env:STREAMDIFFUSION_PATH` at an external checkout to shadow the vendored copy during development.
 
 ## Troubleshooting
 
 | Problem | Fix |
 |---------|-----|
-| StreamDiffusion not found | Run `.\setup.ps1` |
+| Setup / import errors | Run `.\setup.ps1` |
 | NumPy / TensorRT build errors | Pinned to numpy 1.26.4 — re-run `.\run.ps1` or see SETUP.md |
 | Qwen sidecar missing | `.\setup.ps1 -Profile Full` |
 | RTX upscale fails | Install RTX Video SDK, set `NV_RTX_VIDEO_SDK` |

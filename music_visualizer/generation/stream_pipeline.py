@@ -15,8 +15,6 @@ image each call.
 from __future__ import annotations
 
 import math
-import os
-import sys
 import time
 from pathlib import Path
 from typing import TYPE_CHECKING, Optional
@@ -27,6 +25,7 @@ from PIL import Image
 
 from music_visualizer.config import Config
 from music_visualizer.generation.content_centering import ContentCentering
+from music_visualizer.generation.sd_wrapper import StreamDiffusionWrapper
 from music_visualizer.generation.transforms import FeedbackTransform
 from music_visualizer.utils.logging import get_logger
 
@@ -38,27 +37,6 @@ logger = get_logger(__name__)
 # TF32 accelerates matmul on Ampere+ (RTX 30/40/50) with negligible quality loss.
 torch.backends.cuda.matmul.allow_tf32 = True
 torch.backends.cudnn.allow_tf32 = True
-
-
-def _ensure_streamdiffusion_on_path(sd_path: str) -> None:
-    """Put the StreamDiffusion repo root on ``sys.path``.
-
-    The repo exposes ``utils.wrapper.StreamDiffusionWrapper`` (and the editable
-    ``streamdiffusion`` package is already installed in the active venv).
-    """
-    sd_path = str(Path(sd_path).resolve())
-    if not os.path.isdir(sd_path):
-        raise FileNotFoundError(
-            f"StreamDiffusion path does not exist: {sd_path}\n"
-            "Set STREAMDIFFUSION_PATH or pass --streamdiffusion-path."
-        )
-    if not os.path.isfile(os.path.join(sd_path, "utils", "wrapper.py")):
-        raise FileNotFoundError(
-            f"Could not find utils/wrapper.py under {sd_path}. "
-            "Is this the StreamDiffusion repo root?"
-        )
-    if sd_path not in sys.path:
-        sys.path.insert(0, sd_path)
 
 
 _TRT_BUILD_DIMS = {"width": 512, "height": 512}
@@ -201,9 +179,6 @@ class StreamPipeline:
         self.mode = config.mode
         self.width = config.width
         self.height = config.height
-
-        _ensure_streamdiffusion_on_path(config.streamdiffusion_path)
-        from utils.wrapper import StreamDiffusionWrapper  # noqa: E402
 
         cfg_type = "none" if self.mode == "txt2img" else config.cfg_type
 

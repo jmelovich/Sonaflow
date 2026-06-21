@@ -1,6 +1,6 @@
 # Sonaflow Windows Installer — Implementation Plan
 
-Status: **Planning** (approved scope, not yet built)
+Status: **M1 implemented**, **M2 offline installer implemented** (see `installer/README.md`)
 Goal: ship Sonaflow as a near-normal Windows desktop install — user double-clicks
 an installer, gets a Start Menu / desktop shortcut, and runs the app without ever
 touching Python, Poetry, pip, Git, or a C++ compiler.
@@ -26,7 +26,9 @@ touching Python, Poetry, pip, Git, or a C++ compiler.
 
 ## 2. Why not just reproduce `setup.ps1` on the user's machine?
 
-The current `setup.ps1` is a *developer bootstrap*: it requires Python 3.10, Git, Poetry, a C compiler (aubio/native DLLs), network access, and runs `poetry install` + multiple `pip` passes + model downloads. That is fragile, slow, and the opposite of an app install.
+The old `setup.ps1` required Poetry, a sibling StreamDiffusion clone, Git, and multiple pip passes.
+**Current dev setup** uses a single `.venv` + pip; StreamDiffusion is vendored at `streamdiffusion/`.
+Packaging harvests that `.venv` via `installer/tools/Freeze-Env.ps1`.
 
 **Strategy: do all slow/fragile work once on a build machine and ship the *result*.**
 Freeze both Python environments, prebuild native DLLs, pre-bundle the small models, and host everything as versioned archives the bootstrapper downloads and lays down.
@@ -39,8 +41,8 @@ Freeze both Python environments, prebuild native DLLs, pre-bundle the small mode
 %LOCALAPPDATA%\Programs\Sonaflow\            (code + frozen runtimes — written once at install)
 ├── Sonaflow.exe                             # launcher stub (real exe, proper icon)
 ├── app\
-│   └── music_visualizer\...                 # this repo's python package
-├── streamdiffusion\                         # bundled StreamDiffusion checkout (no .git)
+│   ├── music_visualizer\...             # this repo's python package
+│   └── streamdiffusion\...              # vendored StreamDiffusion package (Apache 2.0)
 ├── runtime\
 │   ├── main-env\python.exe + Lib\site-packages\   # torch cu128, streamdiffusion, TensorRT, opencv, aubio, ...
 │   └── qwen-env\python.exe  + Lib\site-packages\   # OPTIONAL component (transformers 4.45, bitsandbytes, ...)
@@ -76,20 +78,19 @@ Relocation rules:
 - **Avoid editable installs.** Install `streamdiffusion` as a built wheel (`pip install <sd_repo>`), not `-e`, so no absolute `.pth`/`.egg-link` is baked in. Keep the SD source tree bundled separately only for assets it reads at runtime.
 - Verify no absolute paths remain: grep `site-packages` for the build-machine path; fail the build if any are found.
 
-### Harvest procedure (build machine, RTX 50)
-1. `setup.ps1 -Profile Full` to get a known-good working set + model cache.
-2. For each env: lay down standalone CPython → `pip install` the resolved, pinned dependency set (mirror exactly what the working Poetry venv + sidecar venv contain; pull versions from `setup.lock.json` + `requirements.txt`).
-3. Smoke test each frozen env in place (`python.exe -c "import torch, streamdiffusion, tensorrt"`, sidecar imports).
-4. Strip caches (`__pycache__`, tests, `*.dist-info` RECORD noise is fine to keep).
+### Harvest procedure (build machine)
+1. `setup.ps1 -Profile Full` to create `.venv` (+ optional `.venv-qwen`).
+2. `Freeze-Env.ps1` copies `.venv` site-packages onto standalone CPython and embeds the vendored `streamdiffusion/` package.
+3. Smoke-test imports; scan for leaked build-machine paths.
 
 ---
 
 ## 5. Launcher (`Sonaflow.exe`)
 
-Small compiled stub (e.g. a tiny C/Rust/Go exe, or a packaged script) that:
+Small compiled stub that:
 1. Resolves install root + mutable data root.
-2. Sets env: `PYTHONUTF8=1`, `HF_HOME=%LOCALAPPDATA%\Sonaflow\models`, `STREAMDIFFUSION_PATH=<install>\streamdiffusion`.
-3. `cwd` → bundled `streamdiffusion\` (matches how `main.py` expects to run).
+2. Sets env: `PYTHONUTF8=1`, `PYTHONPATH=<install>\app`, `HF_HOME=%LOCALAPPDATA%\Sonaflow\models`, `SONAFLOW_ENGINE_DIR=...`.
+3. `cwd` → `<install>\app` (vendored `streamdiffusion` + `music_visualizer` live here).
 4. Exec `runtime\main-env\python.exe app\music_visualizer\main.py` with persisted settings.
 
 This **replaces `run.ps1` + Poetry entirely**. The pip-probe/repair logic in `run.ps1` is dropped (deps are frozen).
@@ -201,7 +202,7 @@ The distributed `Sonaflow-Setup.exe` is small (just the bootstrapper). At runtim
 
 - Manifest keys already include `gpu_arch` / `torch_cu` / `trt` / `driver_min`.
 - `runtime\` can hold **multiple** main-env variants (e.g. `main-env-cu128`, `main-env-cu121`); the bootstrapper picks the build matching the detected GPU arch, downloading only that one.
-- Add the upstream StreamDiffusion path (cu121) as an alternate `core-runtime` payload (the repo already supports `-UseUpstreamStreamDiffusion`).
+- Dev builds already support `-Cuda cu128|cu121` via `setup.ps1`; ship separate frozen payloads per profile when ready.
 - Engine prebuild farm extends to additional `sm_*` targets; absent a prebuilt engine, on-device build remains the fallback for any supported card.
 
 ---

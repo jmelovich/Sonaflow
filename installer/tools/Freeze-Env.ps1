@@ -1,25 +1,25 @@
 <#
 .SYNOPSIS
-    Build a relocatable "main-env" by harvesting the working Poetry venv's
-    packages onto a standalone CPython. No re-download of torch/TensorRT.
+    Build a relocatable "main-env" by harvesting Sonaflow's .venv packages onto
+    a standalone CPython. No re-download of torch/TensorRT.
 
 .DESCRIPTION
-    1. Locates the source Poetry venv (or accepts -SourceVenv).
+    1. Locates Sonaflow's .venv (or accepts -SourceVenv).
     2. Downloads + extracts a relocatable CPython (python-build-standalone).
     3. Copies the venv's Lib\site-packages onto the standalone interpreter.
-    4. De-editable-izes the StreamDiffusion install (copies src\streamdiffusion
-       in place of the editable .pth shim) so no absolute dev path is baked in.
+    4. Copies the vendored streamdiffusion package into site-packages so imports
+       work even before the launcher adjusts sys.path.
     5. Smoke-tests imports and scans for leaked build-machine paths.
 
     The result is a self-contained folder invoked by explicit interpreter path
     (no activation), matching how run/launcher call python.
 
 .EXAMPLE
-    .\Freeze-Env.ps1 -StreamDiffusionPath H:\_dev\StreamDiffusion -Dest ..\build\runtime\main-env
+    .\Freeze-Env.ps1 -Dest ..\build\runtime\main-env
 #>
 [CmdletBinding()]
 param(
-    [string]$StreamDiffusionPath = $env:STREAMDIFFUSION_PATH,
+    [string]$ProjectRoot,
     [string]$SourceVenv,
     [Parameter(Mandatory = $true)][string]$Dest,
     [string]$PythonUrl,
@@ -30,13 +30,11 @@ $ErrorActionPreference = "Stop"
 . (Join-Path $PSScriptRoot "Common.ps1")
 
 if (-not $PythonUrl) { $PythonUrl = $script:DefaultStandalonePythonUrl }
-if (-not $StreamDiffusionPath) {
-    throw "Provide -StreamDiffusionPath or set STREAMDIFFUSION_PATH."
-}
-$StreamDiffusionPath = (Resolve-Path $StreamDiffusionPath).Path
+if (-not $ProjectRoot) { $ProjectRoot = Get-ProjectRootFromTools }
+$ProjectRoot = (Resolve-Path $ProjectRoot).Path
 
-Write-Step "Resolving source Poetry venv"
-$srcVenv = Get-SourceVenvPath -StreamDiffusionPath $StreamDiffusionPath -Explicit $SourceVenv
+Write-Step "Resolving source Sonaflow .venv"
+$srcVenv = Get-SourceVenvPath -ProjectRoot $ProjectRoot -Explicit $SourceVenv
 $srcSitePackages = Join-Path $srcVenv "Lib\site-packages"
 if (-not (Test-Path $srcSitePackages)) {
     throw "Source site-packages not found: $srcSitePackages"
@@ -69,25 +67,19 @@ New-Item -ItemType Directory -Force -Path $destSitePackages | Out-Null
 
 # --- copy site-packages (merge onto the standalone's pip/setuptools) ---
 Write-Step "Copying site-packages (this is the large step)"
-# /E recurse incl. empty, /NJH /NJS quiet headers, /R:1 /W:1 fail fast, multi-thread.
 $rc = Start-Process robocopy -ArgumentList @(
     "`"$srcSitePackages`"", "`"$destSitePackages`"", "/E", "/NFL", "/NDL", "/NJH", "/NJS", "/R:1", "/W:1", "/MT:16"
 ) -NoNewWindow -Wait -PassThru
-# robocopy exit codes < 8 are success.
 if ($rc.ExitCode -ge 8) { throw "robocopy failed (exit $($rc.ExitCode))" }
 Write-Ok "site-packages copied"
 
-# --- de-editable-ize streamdiffusion ---
-Write-Step "Resolving StreamDiffusion package (replace editable shim with real source)"
-$sdSrc = $null
-foreach ($cand in @(
-        (Join-Path $StreamDiffusionPath "src\streamdiffusion"),
-        (Join-Path $StreamDiffusionPath "streamdiffusion"))) {
-    if (Test-Path (Join-Path $cand "__init__.py")) { $sdSrc = $cand; break }
+# --- ensure vendored streamdiffusion is present in site-packages ---
+Write-Step "Copying vendored streamdiffusion into site-packages"
+$sdSrc = Join-Path $ProjectRoot "streamdiffusion"
+if (-not (Test-Path (Join-Path $sdSrc "__init__.py"))) {
+    throw "Vendored streamdiffusion package not found at $sdSrc"
 }
-if (-not $sdSrc) { throw "Could not find the streamdiffusion package under $StreamDiffusionPath (looked in src\ and root)." }
 
-# Remove PEP 660 editable shims so the copied package is the import target.
 Get-ChildItem $destSitePackages -Filter "__editable__*streamdiffusion*" -ErrorAction SilentlyContinue |
     ForEach-Object { Remove-Item $_.FullName -Force; Write-Warn2 "removed shim $($_.Name)" }
 Get-ChildItem $destSitePackages -Filter "__editable___streamdiffusion*" -ErrorAction SilentlyContinue |
@@ -103,8 +95,8 @@ $rc2 = Start-Process robocopy -ArgumentList @(
 if ($rc2.ExitCode -ge 8) { throw "robocopy (streamdiffusion) failed (exit $($rc2.ExitCode))" }
 Write-Ok "streamdiffusion copied from $sdSrc"
 
-# Drop any *.pth that still references the source venv / SD path.
-$leakPaths = @($srcVenv, $StreamDiffusionPath)
+# Drop any *.pth that still references the source venv / project path.
+$leakPaths = @($srcVenv, $ProjectRoot)
 Get-ChildItem $destSitePackages -Filter "*.pth" -ErrorAction SilentlyContinue | ForEach-Object {
     $content = Get-Content $_.FullName -Raw -ErrorAction SilentlyContinue
     foreach ($lp in $leakPaths) {
@@ -147,7 +139,6 @@ else { Write-Ok "Imports OK" }
 
 # --- leaked-path scan (non-fatal warning) ---
 Write-Step "Scanning for leaked build-machine paths in text shims"
-$needle = $srcVenv.Replace('\', '\\')
 $hits = Get-ChildItem $destSitePackages -Recurse -Include *.pth, *.egg-link, *.txt -ErrorAction SilentlyContinue |
     Select-String -SimpleMatch $srcVenv -List -ErrorAction SilentlyContinue
 if ($hits) {

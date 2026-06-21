@@ -56,10 +56,10 @@ if (-not (Test-Path (Join-Path $StageDir "Sonaflow.exe"))) {
     throw @"
 Staged layout not found at: $StageDir
 
-Run Milestone 1 first:
+Run Milestone 1 first (after ..\setup.ps1 on the build machine):
   cd installer\tools
-  .\Freeze-Env.ps1 -StreamDiffusionPath <path> -Dest ..\build\runtime\main-env
-  .\Stage-Local.ps1 -StreamDiffusionPath <path> -FrozenMainEnv ..\build\runtime\main-env -StageDir ..\build\stage
+  .\Freeze-Env.ps1 -Dest ..\build\runtime\main-env
+  .\Stage-Local.ps1 -FrozenMainEnv ..\build\runtime\main-env -StageDir ..\build\stage
 "@
 }
 Write-Ok "Stage: $StageDir ($([math]::Round((Get-ChildItem $StageDir -Recurse | Measure-Object Length -Sum).Sum / 1GB, 1)) GB)"

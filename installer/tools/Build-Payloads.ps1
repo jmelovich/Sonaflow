@@ -12,7 +12,7 @@
     that compile-time include.
 
     Archive internal layouts (so the installer extracts to clean targets):
-      core-runtime-<ver>.zip   -> {app}            (Sonaflow.exe, app\, streamdiffusion\, runtime\main-env\, native\)
+      core-runtime-<ver>.zip   -> {app}            (Sonaflow.exe, app\, runtime\main-env\, native\)
       models-core-<ver>.zip    -> {data}\models    (hub\models--stabilityai--sd-turbo, --madebyollin--taesd, --laion--larger_clap_music)
       qwen-runtime-<ver>.zip    -> {app}            (runtime\qwen-env\)            [optional]
       qwen-model-<ver>.zip      -> {data}\models    (hub\models--Qwen--Qwen2-Audio-7B-Instruct) [optional]

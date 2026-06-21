@@ -13,7 +13,7 @@
  *     <root>\Sonaflow.exe                         (this)
  *     <root>\runtime\main-env\python.exe
  *     <root>\app\music_visualizer\main.py
- *     <root>\streamdiffusion\                      (cwd for the child)
+ *     <root>\app\streamdiffusion\                 (vendored package)
  * Mutable data lives at %LOCALAPPDATA%\Sonaflow.
  */
 
@@ -53,10 +53,10 @@ int wmain(void) {
     if (slash) *slash = L'\0';
     const wchar_t *root = exePath;
 
-    wchar_t pythonExe[MAX_PATH], mainPy[MAX_PATH], sdPath[MAX_PATH];
+    wchar_t pythonExe[MAX_PATH], mainPy[MAX_PATH], appPath[MAX_PATH];
     join(pythonExe, MAX_PATH, root, L"runtime\\main-env\\python.exe");
     join(mainPy, MAX_PATH, root, L"app\\music_visualizer\\main.py");
-    join(sdPath, MAX_PATH, root, L"streamdiffusion");
+    join(appPath, MAX_PATH, root, L"app");
 
     if (GetFileAttributesW(pythonExe) == INVALID_FILE_ATTRIBUTES) {
         fwprintf(stderr, L"Sonaflow: runtime not found at %s\n", pythonExe);
@@ -78,9 +78,9 @@ int wmain(void) {
     SHCreateDirectoryExW(NULL, enginesDir, NULL);
 
     SetEnvironmentVariableW(L"PYTHONUTF8", L"1");
+    SetEnvironmentVariableW(L"PYTHONPATH", appPath);
     SetEnvironmentVariableW(L"SONAFLOW_DATA_DIR", dataDir);
     SetEnvironmentVariableW(L"HF_HOME", modelsDir);
-    SetEnvironmentVariableW(L"STREAMDIFFUSION_PATH", sdPath);
     SetEnvironmentVariableW(L"SONAFLOW_ENGINE_DIR", enginesDir);
 
     /* Optional Qwen sidecar (separate component); only point at it if present. */
@@ -100,13 +100,13 @@ int wmain(void) {
     else
         _snwprintf_s(cmd, cap, _TRUNCATE, L"\"%s\" \"%s\"", pythonExe, mainPy);
 
-    SetCurrentDirectoryW(sdPath);
+    SetCurrentDirectoryW(appPath);
 
     STARTUPINFOW si; PROCESS_INFORMATION pi;
     ZeroMemory(&si, sizeof(si)); si.cb = sizeof(si);
     ZeroMemory(&pi, sizeof(pi));
 
-    if (!CreateProcessW(NULL, cmd, NULL, NULL, TRUE, 0, NULL, sdPath, &si, &pi)) {
+    if (!CreateProcessW(NULL, cmd, NULL, NULL, TRUE, 0, NULL, appPath, &si, &pi)) {
         fwprintf(stderr, L"Sonaflow: failed to launch interpreter (error %lu).\n", GetLastError());
         free(cmd);
         return 1;

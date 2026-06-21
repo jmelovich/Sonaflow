@@ -5,12 +5,9 @@ on the main thread, and accepts live prompt injection from the terminal (type a
 new prompt + Enter at any time). A headless ``--benchmark N`` mode is provided
 for measuring throughput without a window.
 
-Must run inside the StreamDiffusion Poetry venv (torch cu128 + streamdiffusion).
-From the StreamDiffusion repo root after setup::
+From the Sonaflow repo root after ``setup.ps1``::
 
-    cd path/to/StreamDiffusion
-    $env:PYTHONUTF8 = "1"
-    poetry run python path/to/Sonaflow/music_visualizer/main.py "your prompt"
+    .\\run.ps1 "your prompt"
 """
 
 from __future__ import annotations
@@ -23,10 +20,14 @@ import time
 from pathlib import Path
 from typing import Optional
 
-# --- bootstrap: make `import music_visualizer.*` work when run as a script ---
+# --- bootstrap: make `import music_visualizer.*` and vendored streamdiffusion work ---
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
+
+from music_visualizer.bootstrap_paths import bootstrap_import_paths  # noqa: E402
+
+bootstrap_import_paths()
 
 from music_visualizer.config import Config  # noqa: E402
 from music_visualizer.ui.persistence import load_defaults_dict  # noqa: E402

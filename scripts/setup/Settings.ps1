@@ -3,7 +3,6 @@
 function Install-Settings {
     param(
         [string]$ProjectRoot,
-        [string]$StreamDiffusionPath,
         [ValidateSet("Minimal", "Standard", "Full")]
         [string]$Profile,
         [switch]$Force
@@ -26,17 +25,10 @@ function Install-Settings {
     foreach ($key in $overrides.Keys) {
         $settings.$key = $overrides[$key]
     }
-    # Resolved at runtime when null; store absolute path for clarity after setup.
-    $settings.streamdiffusion_path = $StreamDiffusionPath
+    # streamdiffusion_path stays null — vendored package is used unless overridden at runtime.
 
     $json = $settings | ConvertTo-Json -Depth 20
     Set-Content -Path $target -Value $json -Encoding utf8
     Write-SetupOk "Created visualizer_settings.json (profile: $Profile)"
     return $target
-}
-
-function Set-StreamDiffusionPathPersist {
-    param([string]$Path)
-    [Environment]::SetEnvironmentVariable("STREAMDIFFUSION_PATH", $Path, "User")
-    Write-SetupOk "Persisted STREAMDIFFUSION_PATH for current user"
 }

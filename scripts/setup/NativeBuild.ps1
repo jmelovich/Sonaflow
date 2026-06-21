@@ -35,7 +35,6 @@ function Test-NativeBuildTools {
 
 function Install-NativeBridges {
     param(
-        [string]$StreamDiffusionPath,
         [string]$ProjectRoot,
         [switch]$SkipNativeBuild
     )
@@ -56,10 +55,13 @@ function Install-NativeBridges {
         return
     }
 
-    Push-Location $StreamDiffusionPath
+    . (Join-Path $PSScriptRoot "MainEnv.ps1")
+    $python = Get-VenvPython -ProjectRoot $ProjectRoot
+
+    Push-Location $ProjectRoot
     try {
         Write-Host "Building glpresent_bridge.dll ..."
-        poetry run python (Join-Path $ProjectRoot "music_visualizer\display\native\build_glpresent.py")
+        & $python (Join-Path $ProjectRoot "music_visualizer\display\native\build_glpresent.py")
         if ($LASTEXITCODE -eq 0) {
             Write-SetupOk "glpresent_bridge.dll built"
         }
@@ -69,7 +71,7 @@ function Install-NativeBridges {
 
         if ($env:NV_RTX_VIDEO_SDK -or (Get-Content (Join-Path $ProjectRoot "visualizer_settings.json") -ErrorAction SilentlyContinue | Select-String "rtx")) {
             Write-Host "Building rtxvsr_bridge.dll ..."
-            poetry run python (Join-Path $ProjectRoot "music_visualizer\generation\native\build_rtxvsr.py")
+            & $python (Join-Path $ProjectRoot "music_visualizer\generation\native\build_rtxvsr.py")
             if ($LASTEXITCODE -eq 0) {
                 Write-SetupOk "rtxvsr_bridge.dll built"
             }

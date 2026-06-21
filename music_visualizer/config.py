@@ -20,26 +20,20 @@ def _repo_root() -> Path:
     return Path(__file__).resolve().parents[1]
 
 
-def _default_streamdiffusion_path() -> str:
-    """Locate the StreamDiffusion repo (provides ``utils.wrapper`` + the package).
+from music_visualizer.bootstrap_paths import bootstrap_import_paths, repo_root
 
-    Order of precedence: ``STREAMDIFFUSION_PATH`` env var, sibling checkout
-    ``../StreamDiffusion``, then ``<repo>/StreamDiffusion`` (setup clone target).
-    """
-    if env := os.environ.get("STREAMDIFFUSION_PATH"):
-        return env
-    root = _repo_root()
-    sibling = root.parent / "StreamDiffusion"
-    if sibling.is_dir():
-        return str(sibling)
-    return str(root / "StreamDiffusion")
+
+def _default_streamdiffusion_path() -> Optional[str]:
+    """Optional dev override for an external StreamDiffusion checkout."""
+    env = os.environ.get("STREAMDIFFUSION_PATH", "").strip()
+    return env or None
 
 
 @dataclass
 class Config:
     # --- StreamDiffusion integration ---
-    streamdiffusion_path: str = field(default_factory=_default_streamdiffusion_path)
-    engine_dir: Optional[str] = None  # defaults to <streamdiffusion_path>/engines
+    streamdiffusion_path: Optional[str] = field(default_factory=_default_streamdiffusion_path)
+    engine_dir: Optional[str] = None  # defaults to <repo>/engines or SONAFLOW_ENGINE_DIR
 
     # --- Generation ---
     model_id: str = "stabilityai/sd-turbo"
@@ -316,7 +310,7 @@ class Config:
         # In packaged installs the program tree may be read-only, so the launcher
         # points engines at a writable per-user dir via SONAFLOW_ENGINE_DIR.
         base = (self.engine_dir or os.environ.get("SONAFLOW_ENGINE_DIR")
-                or os.path.join(self.streamdiffusion_path, "engines"))
+                or str(repo_root() / "engines"))
         if self.acceleration == "tensorrt":
             return os.path.join(base, f"{self.width}x{self.height}")
         return base
@@ -344,8 +338,7 @@ class Config:
         return str(root / ".venv-qwen" / "bin" / "python")
 
     def __post_init__(self) -> None:
-        if not self.streamdiffusion_path:
-            self.streamdiffusion_path = _default_streamdiffusion_path()
+        bootstrap_import_paths()
         if self.t_index_list is None:
             self.t_index_list = [0] if self.mode == "txt2img" else [10]
         if self.do_add_noise is None:

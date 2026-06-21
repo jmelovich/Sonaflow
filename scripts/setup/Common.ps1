@@ -23,28 +23,6 @@ function Get-SetupLock {
     return Get-Content $lockPath -Raw | ConvertFrom-Json
 }
 
-function Resolve-StreamDiffusionPath {
-    param([string]$ProjectRoot)
-    if ($env:STREAMDIFFUSION_PATH -and (Test-Path (Join-Path $env:STREAMDIFFUSION_PATH "pyproject.toml"))) {
-        return (Resolve-Path $env:STREAMDIFFUSION_PATH).Path
-    }
-    $sibling = Join-Path (Split-Path -Parent $ProjectRoot) "StreamDiffusion"
-    if (Test-Path $sibling) {
-        return (Resolve-Path $sibling).Path
-    }
-    $inRepo = Join-Path $ProjectRoot "StreamDiffusion"
-    if (Test-Path $inRepo) {
-        return (Resolve-Path $inRepo).Path
-    }
-    return $sibling
-}
-
-function Set-StreamDiffusionEnv {
-    param([string]$Path)
-    $env:STREAMDIFFUSION_PATH = $Path
-    $env:PYTHONUTF8 = "1"
-}
-
 function Write-SetupStep {
     param([string]$Message)
     Write-Host ""

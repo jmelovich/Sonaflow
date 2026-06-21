@@ -1,4 +1,4 @@
-# Check Python 3.10+, git, and poetry. Returns a hashtable of tool paths.
+# Check Python 3.10+. Returns a hashtable of tool paths.
 
 function Test-Prereqs {
     param(
@@ -7,8 +7,6 @@ function Test-Prereqs {
 
     $result = @{
         Python = $null
-        Git = $null
-        Poetry = $null
         Ok = $true
         Issues = @()
     }
@@ -37,31 +35,6 @@ function Test-Prereqs {
                 Write-SetupOk "Python $verOut ($($pythonCmd.Source))"
             }
         }
-    }
-
-    $gitCmd = Get-Command git -ErrorAction SilentlyContinue
-    if (-not $gitCmd) {
-        $result.Ok = $false
-        $result.Issues += "git not found. Install Git for Windows: https://git-scm.com/download/win"
-    }
-    else {
-        $result.Git = $gitCmd.Source
-        Write-SetupOk "git ($($gitCmd.Source))"
-    }
-
-    $poetryCmd = Get-Command poetry -ErrorAction SilentlyContinue
-    if (-not $poetryCmd) {
-        if ($Strict) {
-            $result.Ok = $false
-            $result.Issues += "Poetry not found. Install: (Invoke-WebRequest -Uri https://install.python-poetry.org -UseBasicParsing).Content | python -"
-        }
-        else {
-            Write-SetupWarn "Poetry not on PATH (required before run.ps1). Install via https://python-poetry.org/docs/#installation"
-        }
-    }
-    else {
-        $result.Poetry = $poetryCmd.Source
-        Write-SetupOk "poetry ($($poetryCmd.Source))"
     }
 
     return $result

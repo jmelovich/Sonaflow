@@ -4,6 +4,8 @@ function Install-Sidecar {
     param(
         [string]$ProjectRoot,
         [object]$Lock,
+        [ValidateSet("cu128", "cu121")]
+        [string]$Cuda = "cu128",
         [switch]$SkipModelDownload
     )
 
@@ -22,12 +24,22 @@ function Install-Sidecar {
         Write-SetupOk "Sidecar venv already exists"
     }
 
+    $torchIndexUrl = if ($Cuda -eq "cu121") {
+        $Lock.torch_index_url_upstream
+    }
+    else {
+        $Lock.torch_index_url
+    }
+    if (-not $torchIndexUrl) {
+        throw "Missing torch index URL in setup.lock.json for CUDA profile $Cuda"
+    }
+
     Write-Host "Upgrading pip in sidecar venv ..."
     & $Python -m pip install --upgrade pip wheel setuptools
     if ($LASTEXITCODE -ne 0) { throw "pip upgrade failed in sidecar venv." }
 
-    Write-Host "Installing PyTorch ($($Lock.torch_index)) in sidecar venv ..."
-    & $Python -m pip install torch torchvision --index-url $Lock.torch_index_url
+    Write-Host "Installing PyTorch ($Cuda) in sidecar venv ..."
+    & $Python -m pip install torch torchvision --index-url $torchIndexUrl
     if ($LASTEXITCODE -ne 0) { throw "torch install failed in sidecar venv." }
 
     Write-Host "Installing sidecar requirements ..."

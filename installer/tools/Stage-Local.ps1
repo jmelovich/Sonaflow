@@ -8,7 +8,7 @@
 
         Sonaflow.exe                      (compiled launcher)
         app\music_visualizer\...          (this repo's package)
-        streamdiffusion\...               (SD checkout minus .git/.venv/engines)
+        app\streamdiffusion\...           (vendored StreamDiffusion package)
         runtime\main-env\...              (frozen env from Freeze-Env.ps1)
         native\*.dll                      (prebuilt bridges, if present)
 
@@ -16,11 +16,10 @@
     %LOCALAPPDATA%\Sonaflow by the launcher; nothing is written into the stage.
 
 .EXAMPLE
-    .\Stage-Local.ps1 -StreamDiffusionPath H:\_dev\StreamDiffusion -FrozenMainEnv ..\build\runtime\main-env -StageDir ..\build\stage
+    .\Stage-Local.ps1 -FrozenMainEnv ..\build\runtime\main-env -StageDir ..\build\stage
 #>
 [CmdletBinding()]
 param(
-    [Parameter(Mandatory = $true)][string]$StreamDiffusionPath,
     [Parameter(Mandatory = $true)][string]$FrozenMainEnv,
     [string]$StageDir = (Join-Path $PSScriptRoot "..\build\stage"),
     [switch]$SkipLauncher
@@ -29,8 +28,7 @@ param(
 $ErrorActionPreference = "Stop"
 . (Join-Path $PSScriptRoot "Common.ps1")
 
-$ProjectRoot = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
-$StreamDiffusionPath = (Resolve-Path $StreamDiffusionPath).Path
+$ProjectRoot = Get-ProjectRootFromTools
 $FrozenMainEnv = (Resolve-Path $FrozenMainEnv).Path
 New-Item -ItemType Directory -Force -Path $StageDir | Out-Null
 $StageDir = (Resolve-Path $StageDir).Path
@@ -52,11 +50,11 @@ Copy-Tree -Src (Join-Path $ProjectRoot "music_visualizer") `
     -ExcludeDirs @("__pycache__")
 Write-Ok "app\music_visualizer"
 
-Write-Step "Staging StreamDiffusion (minus .git / .venv / engines)"
-Copy-Tree -Src $StreamDiffusionPath `
-    -Dst (Join-Path $StageDir "streamdiffusion") `
-    -ExcludeDirs @(".git", ".venv", "engines", "__pycache__")
-Write-Ok "streamdiffusion"
+Write-Step "Staging vendored streamdiffusion under app\"
+Copy-Tree -Src (Join-Path $ProjectRoot "streamdiffusion") `
+    -Dst (Join-Path $StageDir "app\streamdiffusion") `
+    -ExcludeDirs @("__pycache__")
+Write-Ok "app\streamdiffusion"
 
 Write-Step "Staging frozen runtime\main-env"
 Copy-Tree -Src $FrozenMainEnv -Dst (Join-Path $StageDir "runtime\main-env")

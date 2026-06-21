@@ -1,10 +1,13 @@
-# Prefetch HuggingFace models into the StreamDiffusion Poetry cache.
+# Prefetch HuggingFace models into the HuggingFace cache (via Sonaflow .venv).
 
 function Install-Models {
     param(
-        [string]$StreamDiffusionPath,
+        [string]$ProjectRoot,
         [object]$Lock
     )
+
+    . (Join-Path $PSScriptRoot "MainEnv.ps1")
+    $python = Get-VenvPython -ProjectRoot $ProjectRoot
 
     $models = @($Lock.sd_model, $Lock.clap_model)
 
@@ -17,16 +20,10 @@ for model_id in ($modelList):
 print('Done.')
 "@
 
-    Push-Location $StreamDiffusionPath
-    try {
-        Write-Host "Prefetching models: $($models -join ', ') ..."
-        poetry run python -c $script
-        if ($LASTEXITCODE -ne 0) {
-            throw "Model prefetch failed."
-        }
-        Write-SetupOk "Models prefetched"
+    Write-Host "Prefetching models: $($models -join ', ') ..."
+    & $python -c $script
+    if ($LASTEXITCODE -ne 0) {
+        throw "Model prefetch failed."
     }
-    finally {
-        Pop-Location
-    }
+    Write-SetupOk "Models prefetched"
 }

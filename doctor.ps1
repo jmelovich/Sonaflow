@@ -15,7 +15,7 @@ $SetupDir = Join-Path $ProjectRoot "scripts\setup"
 
 . (Join-Path $SetupDir "Common.ps1")
 . (Join-Path $SetupDir "GpuDetect.ps1")
-. (Join-Path $SetupDir "StreamDiffusion.ps1")
+. (Join-Path $SetupDir "MainEnv.ps1")
 . (Join-Path $SetupDir "NativeBuild.ps1")
 
 $Lock = $null
@@ -57,7 +57,7 @@ function Test-Doctor {
 }
 
 Write-Host ""
-Write-Host "Music Visualizer - doctor" -ForegroundColor Cyan
+Write-Host "Sonaflow - doctor" -ForegroundColor Cyan
 Write-Host ""
 
 Write-Host "GPU" -ForegroundColor White
@@ -65,8 +65,11 @@ $gpu = Get-GpuInfo
 Test-Doctor "NVIDIA GPU detected" { $gpu.Available } -Optional
 if ($gpu.Available) {
     Write-Host "         $($gpu.Name), $($gpu.VramGb) GB, driver $($gpu.DriverVersion)" -ForegroundColor DarkGray
-    if (-not $gpu.IsBlackwellOrNewer) {
-        Write-Host "         GPU is not Blackwell-class — blackwell-tensorrt fork may not work (see docs/SETUP.md)" -ForegroundColor Yellow
+    if ($gpu.IsBlackwellOrNewer) {
+        Write-Host "         Blackwell-class GPU — default CUDA profile is cu128" -ForegroundColor DarkGray
+    }
+    else {
+        Write-Host "         Non-Blackwell GPU — use .\setup.ps1 -Cuda cu121 if cu128 fails" -ForegroundColor Yellow
     }
 }
 
@@ -76,45 +79,31 @@ Test-Doctor "Python 3.10+" {
     & python -c 'import sys; raise SystemExit(0 if sys.version_info >= (3,10) else 1)' 2>$null | Out-Null
     $LASTEXITCODE -eq 0
 }
-Test-Doctor "git" { $null -ne (Get-Command git -ErrorAction SilentlyContinue) }
-Test-Doctor "poetry" { $null -ne (Get-Command poetry -ErrorAction SilentlyContinue) }
 
 Write-Host ""
-Write-Host "StreamDiffusion" -ForegroundColor White
-$script:sdPath = $null
-Test-Doctor "StreamDiffusion checkout" {
-    $script:sdPath = Resolve-StreamDiffusionPath -ProjectRoot $ProjectRoot
-    Test-Path (Join-Path $script:sdPath "pyproject.toml")
-}
-if ($script:sdPath -and (Test-Path $script:sdPath)) {
-    $checkout = Get-StreamDiffusionCheckoutInfo -CheckoutPath $script:sdPath
-    if ($checkout.Branch -or $checkout.RemoteUrl) {
-        $label = @()
-        if ($checkout.Branch) { $label += "branch $($checkout.Branch)" }
-        if ($checkout.RemoteUrl) { $label += $checkout.RemoteUrl }
-        Write-Host ("         {0}" -f ($label -join ", ")) -ForegroundColor DarkGray
+Write-Host "Sonaflow environment" -ForegroundColor White
+$venvPython = Join-Path $ProjectRoot ".venv\Scripts\python.exe"
+Test-Doctor "Main venv (.venv)" { Test-Path $venvPython }
+$vendoredPkg = Join-Path $ProjectRoot "streamdiffusion\__init__.py"
+Test-Doctor "Vendored streamdiffusion package" { Test-Path $vendoredPkg }
+
+if (Test-Path $venvPython) {
+    $env:PYTHONPATH = $ProjectRoot
+    Test-Doctor "Imports (torch, streamdiffusion, numpy 1.x)" {
+        & $venvPython -c "import numpy, torch, streamdiffusion; exit(0 if numpy.__version__.startswith('1.') else 1)" 2>$null
+        return ($LASTEXITCODE -eq 0)
     }
-    if ($checkout.IsBlackwellFork -and $gpu.Available -and -not $gpu.IsBlackwellOrNewer) {
-        Write-Host "  [WARN] blackwell-tensorrt fork on a non-Blackwell GPU — use -UseUpstreamStreamDiffusion or manual upstream install" -ForegroundColor Yellow
-        $script:warnings++
+    Test-Doctor "Visualizer deps (aubio, opencv, sounddevice)" {
+        & $venvPython -c "import aubio, cv2, sounddevice, soundfile" 2>$null
+        return ($LASTEXITCODE -eq 0)
     }
-    Push-Location $script:sdPath
-    try {
-        Test-Doctor "Poetry env + streamdiffusion import" {
-            & poetry run python -c "import streamdiffusion, torch" 2>$null
-            return ($LASTEXITCODE -eq 0)
-        }
-        Test-Doctor "Visualizer deps (numpy 1.x, aubio, opencv)" {
-            & poetry run python -c "import numpy, aubio, cv2; exit(0 if numpy.__version__.startswith('1.') else 1)" 2>$null
-            return ($LASTEXITCODE -eq 0)
-        }
-        Test-Doctor "compel installed" {
-            & poetry run python -c "import compel" 2>$null
-            return ($LASTEXITCODE -eq 0)
-        } -Optional
-    }
-    finally {
-        Pop-Location
+    Test-Doctor "compel installed" {
+        & $venvPython -c "import compel" 2>$null
+        return ($LASTEXITCODE -eq 0)
+    } -Optional
+    Test-Doctor "sd_wrapper import" {
+        & $venvPython -c "from music_visualizer.generation.sd_wrapper import StreamDiffusionWrapper" 2>$null
+        return ($LASTEXITCODE -eq 0)
     }
 }
 
@@ -147,28 +136,22 @@ catch {
     $warnings++
 }
 
-if ($Lock -and $script:sdPath -and (Test-Path $script:sdPath)) {
-    Push-Location $script:sdPath
-    try {
-        foreach ($modelKey in @("sd_model", "clap_model")) {
-            $modelId = $Lock.$modelKey
-            Test-Doctor "Model cached: $modelId" {
-                $py = ('from huggingface_hub import try_to_load_from_cache; import sys; r=try_to_load_from_cache("{0}", "config.json"); sys.exit(0 if r else 1)' -f $modelId)
-                poetry run python -c $py 2>$null | Out-Null
-                $LASTEXITCODE -eq 0
-            } -Optional
-        }
-        if (Test-Path $qwenPython) {
-            Test-Doctor "Model cached: $($Lock.qwen_model)" {
-                $qid = $Lock.qwen_model
-                $py = ('from huggingface_hub import try_to_load_from_cache; import sys; r=try_to_load_from_cache("{0}", "config.json"); sys.exit(0 if r else 1)' -f $qid)
-                & $qwenPython -c $py 2>$null | Out-Null
-                $LASTEXITCODE -eq 0
-            } -Optional
-        }
+if ($Lock -and (Test-Path $venvPython)) {
+    foreach ($modelKey in @("sd_model", "clap_model")) {
+        $modelId = $Lock.$modelKey
+        Test-Doctor "Model cached: $modelId" {
+            $py = ('from huggingface_hub import try_to_load_from_cache; import sys; r=try_to_load_from_cache("{0}", "config.json"); sys.exit(0 if r else 1)' -f $modelId)
+            & $venvPython -c $py 2>$null | Out-Null
+            $LASTEXITCODE -eq 0
+        } -Optional
     }
-    finally {
-        Pop-Location
+    if (Test-Path $qwenPython) {
+        Test-Doctor "Model cached: $($Lock.qwen_model)" {
+            $qid = $Lock.qwen_model
+            $py = ('from huggingface_hub import try_to_load_from_cache; import sys; r=try_to_load_from_cache("{0}", "config.json"); sys.exit(0 if r else 1)' -f $qid)
+            & $qwenPython -c $py 2>$null | Out-Null
+            $LASTEXITCODE -eq 0
+        } -Optional
     }
 }
 
