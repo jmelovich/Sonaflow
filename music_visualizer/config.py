@@ -313,7 +313,10 @@ class Config:
         # fail with a static-dimension mismatch. Encode the resolution into the
         # base dir so each size gets its own engine tree (a new one builds on
         # first use of that size).
-        base = self.engine_dir or os.path.join(self.streamdiffusion_path, "engines")
+        # In packaged installs the program tree may be read-only, so the launcher
+        # points engines at a writable per-user dir via SONAFLOW_ENGINE_DIR.
+        base = (self.engine_dir or os.environ.get("SONAFLOW_ENGINE_DIR")
+                or os.path.join(self.streamdiffusion_path, "engines"))
         if self.acceleration == "tensorrt":
             return os.path.join(base, f"{self.width}x{self.height}")
         return base
@@ -331,6 +334,10 @@ class Config:
         """Path to the sidecar venv Python interpreter."""
         if self.qwen_python:
             return self.qwen_python
+        # Packaged installs put the sidecar at runtime\qwen-env (standalone
+        # CPython, python.exe at its root) and point here via env.
+        if env := os.environ.get("SONAFLOW_QWEN_PYTHON"):
+            return env
         root = _repo_root()
         if sys.platform == "win32":
             return str(root / ".venv-qwen" / "Scripts" / "python.exe")

@@ -8,9 +8,12 @@ from pathlib import Path
 from typing import Any, Optional
 
 from music_visualizer.config import Config
+from music_visualizer.utils.paths import settings_path as _settings_path
 
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
-DEFAULTS_PATH = _PROJECT_ROOT / "visualizer_settings.json"
+# Honors SONAFLOW_SETTINGS_PATH / SONAFLOW_DATA_DIR in packaged installs; falls
+# back to the repo root in a dev checkout.
+DEFAULTS_PATH = _settings_path()
 
 # Fields not persisted (runtime-only or derived).
 _SKIP_KEYS = frozenset({"benchmark"})

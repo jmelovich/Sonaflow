@@ -45,7 +45,7 @@ class QwenSidecarClient:
         if not Path(python).is_file():
             raise FileNotFoundError(
                 f"Qwen sidecar Python not found: {python}\n"
-                "Run .\\setup_sidecar.ps1 from the repo root first."
+                "Install the Qwen component, or run with --no-qwen."
             )
 
         cmd = [

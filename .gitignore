@@ -8,3 +8,9 @@ engines/
 ProjectOutline.md
 test/smoke-results/
 test/sandbox/logs/
+installer/build/
+installer/build/payloads/
+installer/dist/
+installer/generated/
+installer/redist/
+__pycache__/

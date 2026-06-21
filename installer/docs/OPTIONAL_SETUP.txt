@@ -1,0 +1,118 @@
+Sonaflow — optional setup (not bundled with the installer)
+============================================================
+
+This installer bundles the Sonaflow application, Python runtime, and native display
+bridges. Public AI models download from Hugging Face on first launch. The items below
+are NOT included because they require a separate license, are GPU-specific, or must be
+built on your exact GPU.
+
+
+ALREADY HANDLED BY THIS INSTALLER
+---------------------------------
+  • Sonaflow application + frozen Python runtime
+  • Generation resolution matched to your display (written to settings)
+  • Start Menu shortcut and uninstaller
+  • Visual C++ runtime (installed automatically if missing)
+
+
+AI MODELS — DOWNLOAD ON FIRST LAUNCH
+------------------------------------
+  SD-Turbo, taesd, CLAP, and (if enabled) Qwen2-Audio are downloaded from Hugging Face
+  automatically the first time you run Sonaflow. Internet is required for that first
+  launch. Models are cached under:
+
+    %LOCALAPPDATA%\Sonaflow\models\
+
+
+FIRST RUN — TENSORRT ENGINE (ONE-TIME, ~5–15 MINUTES)
+-------------------------------------------------------
+  Sonaflow uses TensorRT for real-time generation on NVIDIA RTX GPUs. TensorRT
+  engines are built for your exact GPU + driver + chosen resolution on first launch.
+  They are cached under:
+
+    %LOCALAPPDATA%\Sonaflow\engines\<width>x<height>\
+
+  The first launch after install may appear idle while this runs. Later launches
+  reuse the cached engines and start much faster.
+
+  TensorRT engines are never downloaded — only built locally on your GPU.
+
+  If generation fails or is very slow, try once with:
+
+    Sonaflow.exe --acceleration none "your prompt"
+
+  to confirm the rest of the install works, then retry TensorRT.
+
+
+NVIDIA GPU DRIVER (REQUIRED — NOT BUNDLED)
+------------------------------------------
+  Sonaflow requires an NVIDIA RTX GPU with a recent driver.
+
+  • Download: https://www.nvidia.com/Download/index.aspx
+  • Recommended: driver R570.20 or newer (RTX 50-series / Blackwell path)
+  • Verify: open Command Prompt and run:  nvidia-smi
+
+  This installer was validated on RTX 50-series (e.g. RTX 5080). Other GPUs may
+  work with reduced features or require an on-device engine rebuild.
+
+
+RTX VIDEO SDK — 4K UPSCALING (OPTIONAL — NOT BUNDLED)
+-----------------------------------------------------
+  Real-time upscaling (RTX VSR) requires the NVIDIA RTX Video SDK, which cannot
+  be redistributed inside this installer (license acceptance required).
+
+  1. Download the SDK:
+     https://developer.nvidia.com/rtx-video-sdk
+
+  2. Accept the license and install/extract to a folder, e.g.:
+     C:\RTX-Video-SDK
+
+  3. Set a user environment variable (System Properties → Environment Variables):
+
+     Variable name:  NV_RTX_VIDEO_SDK
+     Variable value: C:\RTX-Video-SDK
+
+     Or in PowerShell (persists for your user account):
+
+     [Environment]::SetEnvironmentVariable(
+       "NV_RTX_VIDEO_SDK", "C:\RTX-Video-SDK", "User")
+
+  4. Restart Sonaflow. Upscaling is enabled by default in Full-profile settings;
+     disable with --no-upscale if you do not install the SDK.
+
+  Without the SDK, Sonaflow still runs at the configured generation resolution;
+  only the RTX upscaling step is skipped.
+
+
+QWEN2-AUDIO CAPTIONS (OPTIONAL RUNTIME — MODEL DOWNLOADED ONLINE)
+---------------------------------------------------------------
+  If you selected the Qwen component, the installer includes the Qwen2-Audio sidecar
+  runtime (~5 GB). The caption model itself (~16 GB) downloads from Hugging Face on
+  first launch when Qwen captions are enabled.
+
+  The model is saved to:
+
+    %LOCALAPPDATA%\Sonaflow\models\
+
+  To download manually later:
+
+    set HF_HOME=%LOCALAPPDATA%\Sonaflow\models
+    "%LOCALAPPDATA%\Programs\Sonaflow\runtime\main-env\python.exe" -c "from huggingface_hub import snapshot_download; snapshot_download('Qwen/Qwen2-Audio-7B-Instruct')"
+
+  Disable captions with:  Sonaflow.exe --no-qwen "your prompt"
+
+
+SETTINGS AND DATA LOCATIONS
+---------------------------
+  Program files:   %LOCALAPPDATA%\Programs\Sonaflow
+  Your settings:   %LOCALAPPDATA%\Sonaflow\visualizer_settings.json
+  Model cache:     %LOCALAPPDATA%\Sonaflow\models
+  TensorRT cache:  %LOCALAPPDATA%\Sonaflow\engines
+  Logs:            console output when launching Sonaflow.exe
+
+
+GETTING HELP
+------------
+  Full documentation: https://github.com/jmelovich/Sonaflow
+  Press F1 in the visualizer window for the settings panel.
+  Type a new prompt in the terminal while the window is open; press q or Esc to quit.
