@@ -9,6 +9,10 @@
   #define AppVersion "0.1.0"
 #endif
 
+#ifndef CudaSuffix
+  #define CudaSuffix ""
+#endif
+
 #ifndef PayloadDir
   #pragma error "PayloadDir must be set at compile time (see Build-OfflineInstaller.ps1)."
 #endif
@@ -31,8 +35,8 @@ DisableProgramGroupPage=yes
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 MinVersion=10.0
-OutputBaseFilename=Sonaflow-Setup-{#AppVersion}-offline
-OutputDir=build\dist
+OutputBaseFilename=Sonaflow-Setup-{#AppVersion}{#CudaSuffix}-offline
+OutputDir=build\dist\Sonaflow-Setup-{#AppVersion}{#CudaSuffix}-offline
 WizardStyle=modern
 DiskSpanning=yes
 Compression=none
@@ -62,12 +66,12 @@ Type: filesandordirs; Name: "{app}"
 Type: filesandordirs; Name: "{localappdata}\Sonaflow"
 
 [Files]
-Source: "{#PayloadDir}\core-runtime-{#AppVersion}.zip"; DestDir: "{tmp}"; DestName: "core-runtime.zip"; Flags: ignoreversion deleteafterinstall
+Source: "{#PayloadDir}\core-runtime-{#AppVersion}{#CudaSuffix}.zip"; DestDir: "{tmp}"; DestName: "core-runtime.zip"; Flags: ignoreversion deleteafterinstall
 #ifdef IncludeModels
-Source: "{#PayloadDir}\models-core-{#AppVersion}.zip"; DestDir: "{tmp}"; DestName: "models-core.zip"; Flags: ignoreversion deleteafterinstall
+Source: "{#PayloadDir}\models-core-{#AppVersion}{#CudaSuffix}.zip"; DestDir: "{tmp}"; DestName: "models-core.zip"; Flags: ignoreversion deleteafterinstall
 #endif
 #ifdef IncludeQwen
-Source: "{#PayloadDir}\qwen-runtime-{#AppVersion}.zip"; DestDir: "{tmp}"; DestName: "qwen-runtime.zip"; Flags: ignoreversion deleteafterinstall; Components: qwen
+Source: "{#PayloadDir}\qwen-runtime-{#AppVersion}{#CudaSuffix}.zip"; DestDir: "{tmp}"; DestName: "qwen-runtime.zip"; Flags: ignoreversion deleteafterinstall; Components: qwen
 #endif
 Source: "docs\OPTIONAL_SETUP.txt"; DestDir: "{app}\docs"; Flags: ignoreversion
 Source: "scripts\write_packaged_settings.py"; DestDir: "{app}\scripts"; Flags: ignoreversion

@@ -6,10 +6,11 @@ function Install-Sidecar {
         [object]$Lock,
         [ValidateSet("cu128", "cu121")]
         [string]$Cuda = "cu128",
+        [string]$VenvRelName = ".venv-qwen",
         [switch]$SkipModelDownload
     )
 
-    $VenvDir = Join-Path $ProjectRoot ".venv-qwen"
+    $VenvDir = Join-Path $ProjectRoot $VenvRelName
     $Python = Join-Path $VenvDir "Scripts\python.exe"
     $ReqFile = Join-Path $ProjectRoot "music_visualizer\qwen_sidecar\requirements.txt"
 

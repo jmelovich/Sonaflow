@@ -141,6 +141,20 @@ First TensorRT run builds engines (~5–15 min), cached under `engines/` in the 
 Engines are tied to `width×height` and GPU architecture. Delete stale engines under
 `engines/` (or `%LOCALAPPDATA%\Sonaflow\engines`) if you see dimension mismatch errors.
 
+## Building an installer
+
+```powershell
+cd installer\tools
+
+# cu128 (default — uses dev .venv, RTX 50)
+.\Build-OfflineInstaller.ps1 -Version 0.1.0
+
+# cu121 (isolated .venv-cu121 — RTX 30/40; does not touch dev .venv)
+.\Build-OfflineInstaller.ps1 -Version 0.1.0 -Cuda cu121
+```
+
+See [`installer/README.md`](../installer/README.md) for `-RefreshEnv`, `-RefreshStage`, and `-SkipQwen`.
+
 ## Attribution
 
 The `streamdiffusion/` package is vendored from [StreamDiffusion](https://github.com/cumulo-autumn/StreamDiffusion)

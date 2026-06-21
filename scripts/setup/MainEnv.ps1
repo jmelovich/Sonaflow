@@ -1,8 +1,11 @@
 # Create Sonaflow's main .venv and install pinned dependencies.
 
 function Get-VenvPython {
-    param([string]$ProjectRoot)
-    $py = Join-Path $ProjectRoot ".venv\Scripts\python.exe"
+    param(
+        [string]$ProjectRoot,
+        [string]$VenvRelName = ".venv"
+    )
+    $py = Join-Path $ProjectRoot (Join-Path $VenvRelName "Scripts\python.exe")
     if (-not (Test-Path $py)) {
         throw "Python venv not found at $py — run setup.ps1 first."
     }
@@ -15,6 +18,7 @@ function Install-MainEnv {
         [object]$Lock,
         [ValidateSet("cu128", "cu121")]
         [string]$Cuda = "cu128",
+        [string]$VenvRelName = ".venv",
         [switch]$SkipTensorRT
     )
 
@@ -23,7 +27,7 @@ function Install-MainEnv {
         throw "Requirements file not found: $requirements"
     }
 
-    $venvDir = Join-Path $ProjectRoot ".venv"
+    $venvDir = Join-Path $ProjectRoot $VenvRelName
     $python = Join-Path $venvDir "Scripts\python.exe"
     $pip = Join-Path $venvDir "Scripts\pip.exe"
 
@@ -31,7 +35,7 @@ function Install-MainEnv {
         Write-Host "Creating Sonaflow venv at $venvDir ..."
         & python -m venv $venvDir
         if ($LASTEXITCODE -ne 0) { throw "python -m venv failed for $venvDir" }
-        Write-SetupOk "Created .venv"
+        Write-SetupOk "Created $VenvRelName"
     }
     else {
         Write-SetupOk "Using existing .venv"

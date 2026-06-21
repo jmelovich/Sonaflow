@@ -15,3 +15,5 @@ installer/generated/
 installer/redist/
 __pycache__/
 /.venv
+/.venv-cu121
+/.venv-qwen-cu121

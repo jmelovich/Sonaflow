@@ -83,8 +83,23 @@ installer/
 
 ```powershell
 cd installer\tools
+
+# Default: cu128 (uses your dev .venv — RTX 50 / Blackwell)
 .\Build-OfflineInstaller.ps1 -Version 0.1.0
+
+# RTX 30/40: build an isolated cu121 installer without touching .venv
+.\Build-OfflineInstaller.ps1 -Version 0.1.0 -Cuda cu121
+
+# Force rebuild package venv + stage + payloads
+.\Build-OfflineInstaller.ps1 -Version 0.1.0 -Cuda cu121 -RefreshEnv -RefreshStage
 ```
+
+| `-Cuda` | Package venv | Stage dir | Output |
+|---------|--------------|-----------|--------|
+| `cu128` (default) | `.venv` | `build/stage` | `build/dist/Sonaflow-Setup-0.1.0-offline/` |
+| `cu121` | `.venv-cu121` | `build/stage-cu121` | `build/dist/Sonaflow-Setup-0.1.0-cu121-offline/` |
+
+Qwen sidecar venvs follow the same pattern: `.venv-qwen` vs `.venv-qwen-cu121`.
 
 **Two phases (do not confuse with a hang):**
 
@@ -96,9 +111,9 @@ cd installer\tools
 Use `-ReusePayloads` to skip phase 1 if zips already exist. Use `-BundleModels` only
 if you need a fully offline install with models embedded (~+4 GB).
 
-Output: `installer\build\dist\Sonaflow-Setup-<ver>-offline.exe` plus one or more
-`Sonaflow-Setup-<ver>-offline-*.bin` files (Windows limits a single EXE to ~4 GB).
-**Copy the entire `dist\` folder** to the target PC and run the `.exe`. Internet is
+Output: `installer\build\dist\Sonaflow-Setup-<ver>-offline\` (or `...\Sonaflow-Setup-<ver>-cu121-offline\`) containing the `.exe` and any `.bin` files.
+
+**Copy that entire subfolder** to the target PC and run the `.exe`. Internet is
 **required on first launch** to download public models.
 
 ### What the offline installer does

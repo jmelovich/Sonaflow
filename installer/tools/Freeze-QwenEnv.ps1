@@ -4,11 +4,16 @@
 
 .EXAMPLE
     .\Freeze-QwenEnv.ps1 -ProjectRoot H:\_dev\Sonaflow -Dest ..\build\runtime\qwen-env
+
+.EXAMPLE
+    .\Freeze-QwenEnv.ps1 -Cuda cu121 -Dest ..\build\runtime\cu121\qwen-env
 #>
 [CmdletBinding()]
 param(
     [string]$ProjectRoot,
     [string]$SourceVenv,
+    [ValidateSet("cu128", "cu121")]
+    [string]$Cuda = "cu128",
     [Parameter(Mandatory = $true)][string]$Dest,
     [string]$PythonUrl,
     [switch]$KeepExisting
@@ -27,7 +32,9 @@ else {
 }
 
 if (-not $SourceVenv) {
-    $SourceVenv = Join-Path $ProjectRoot ".venv-qwen"
+    . (Join-Path $ScriptDir "PackageEnv.ps1")
+    $venvRel = Get-PackageQwenVenvRelName -Cuda $Cuda
+    $SourceVenv = Join-Path $ProjectRoot $venvRel
 }
 if (-not (Test-Path $SourceVenv)) {
     throw @"
@@ -49,10 +56,7 @@ if (-not (Test-Path $srcPython)) { $srcPython = Join-Path $SourceVenv "python.ex
 $srcMinor = Get-PythonMinor -PythonExe $srcPython
 Write-Ok "Source qwen venv: $SourceVenv (Python $srcMinor)"
 
-if (-not [System.IO.Path]::IsPathRooted($Dest)) {
-    $Dest = Join-Path (Get-Location) $Dest
-}
-$Dest = [System.IO.Path]::GetFullPath($Dest)
+$Dest = Resolve-PackagePath -Path $Dest
 if ((Test-Path $Dest) -and $KeepExisting) {
     Write-Warn2 "Dest exists and -KeepExisting set; reusing $Dest"
 }

@@ -16,11 +16,16 @@
 
 .EXAMPLE
     .\Freeze-Env.ps1 -Dest ..\build\runtime\main-env
+
+.EXAMPLE
+    .\Freeze-Env.ps1 -Cuda cu121 -Dest ..\build\runtime\cu121\main-env
 #>
 [CmdletBinding()]
 param(
     [string]$ProjectRoot,
     [string]$SourceVenv,
+    [ValidateSet("cu128", "cu121")]
+    [string]$Cuda = "cu128",
     [Parameter(Mandatory = $true)][string]$Dest,
     [string]$PythonUrl,
     [switch]$KeepExisting
@@ -33,8 +38,8 @@ if (-not $PythonUrl) { $PythonUrl = $script:DefaultStandalonePythonUrl }
 if (-not $ProjectRoot) { $ProjectRoot = Get-ProjectRootFromTools }
 $ProjectRoot = (Resolve-Path $ProjectRoot).Path
 
-Write-Step "Resolving source Sonaflow .venv"
-$srcVenv = Get-SourceVenvPath -ProjectRoot $ProjectRoot -Explicit $SourceVenv
+Write-Step "Resolving source package venv (CUDA $Cuda)"
+$srcVenv = Get-SourceVenvPath -ProjectRoot $ProjectRoot -Explicit $SourceVenv -Cuda $Cuda
 $srcSitePackages = Join-Path $srcVenv "Lib\site-packages"
 if (-not (Test-Path $srcSitePackages)) {
     throw "Source site-packages not found: $srcSitePackages"
@@ -45,7 +50,7 @@ $srcMinor = Get-PythonMinor -PythonExe $srcPython
 Write-Ok "Source venv: $srcVenv (Python $srcMinor)"
 
 # --- standalone interpreter ---
-$Dest = [System.IO.Path]::GetFullPath((Join-Path (Get-Location) $Dest))
+$Dest = Resolve-PackagePath -Path $Dest
 if ((Test-Path $Dest) -and $KeepExisting) {
     Write-Warn2 "Dest exists and -KeepExisting set; reusing $Dest"
 }

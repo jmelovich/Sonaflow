@@ -40,6 +40,7 @@ param(
     [string]$EngineDir,
     [string]$OutDir = (Join-Path $PSScriptRoot "..\build\dist"),
     [string]$GeneratedDir = (Join-Path $PSScriptRoot "..\generated"),
+    [string]$PayloadSuffix = "",
     [string]$GpuArch = "sm_120",
     [string]$TorchCu = "cu128",
     [string]$Trt = "10.x",
@@ -61,11 +62,14 @@ $engines = [System.Collections.ArrayList]::new()
 
 function New-Zip {
     param([string]$SourceDir, [string]$ZipPath)
-    if (Test-Path $ZipPath) { Remove-Item $ZipPath -Force }
+    $part = "$ZipPath.part"
+    if (Test-Path $part) { Remove-Item $part -Force -ErrorAction SilentlyContinue }
+    if (Test-Path $ZipPath) { Remove-Item $ZipPath -Force -ErrorAction SilentlyContinue }
     Write-Host "    zipping -> $(Split-Path $ZipPath -Leaf)"
     [System.IO.Compression.ZipFile]::CreateFromDirectory(
-        $SourceDir, $ZipPath,
+        $SourceDir, $part,
         [System.IO.Compression.CompressionLevel]::Optimal, $false)
+    Move-Item $part $ZipPath -Force
 }
 
 function Add-Payload {
@@ -89,7 +93,7 @@ $coreSonaExe = Join-Path $StageDir "Sonaflow.exe"
 if (-not (Test-Path $coreSonaExe)) {
     Write-Warn2 "Sonaflow.exe not found in stage - run Stage-Local.ps1 first (continuing anyway)."
 }
-$coreZip = Join-Path $OutDir "core-runtime-$Version.zip"
+$coreZip = Join-Path $OutDir "core-runtime-$Version$PayloadSuffix.zip"
 New-Zip -SourceDir $StageDir -ZipPath $coreZip
 Add-Payload -Id "core-runtime" -ZipPath $coreZip
 
@@ -109,7 +113,7 @@ if ($ModelsHubDir -and (Test-Path $ModelsHubDir)) {
     }
     Get-ChildItem $ModelsHubDir -Filter "version*.txt" -ErrorAction SilentlyContinue |
         ForEach-Object { Copy-Item $_.FullName (Join-Path $hubDst $_.Name) -Force }
-    $modelsZip = Join-Path $OutDir "models-core-$Version.zip"
+    $modelsZip = Join-Path $OutDir "models-core-$Version$PayloadSuffix.zip"
     New-Zip -SourceDir $tmpHub -ZipPath $modelsZip
     Add-Payload -Id "models-core" -ZipPath $modelsZip
     Remove-Item $tmpHub -Recurse -Force -ErrorAction SilentlyContinue
@@ -126,7 +130,7 @@ if ($QwenEnvDir -and (Test-Path $QwenEnvDir)) {
     $qDst = Join-Path $tmpQ "runtime\qwen-env"
     New-Item -ItemType Directory -Force -Path (Split-Path $qDst) | Out-Null
     Copy-Item $QwenEnvDir $qDst -Recurse -Force
-    $qZip = Join-Path $OutDir "qwen-runtime-$Version.zip"
+    $qZip = Join-Path $OutDir "qwen-runtime-$Version$PayloadSuffix.zip"
     New-Zip -SourceDir $tmpQ -ZipPath $qZip
     Add-Payload -Id "qwen-runtime" -ZipPath $qZip
     Remove-Item $tmpQ -Recurse -Force -ErrorAction SilentlyContinue
@@ -139,7 +143,7 @@ if ($QwenModelHubDir -and (Test-Path (Join-Path $QwenModelHubDir $QwenModel))) {
     $qmHub = Join-Path $tmpQM "hub"
     New-Item -ItemType Directory -Force -Path $qmHub | Out-Null
     Copy-Item (Join-Path $QwenModelHubDir $QwenModel) (Join-Path $qmHub $QwenModel) -Recurse -Force
-    $qmZip = Join-Path $OutDir "qwen-model-$Version.zip"
+    $qmZip = Join-Path $OutDir "qwen-model-$Version$PayloadSuffix.zip"
     New-Zip -SourceDir $tmpQM -ZipPath $qmZip
     Add-Payload -Id "qwen-model" -ZipPath $qmZip
     Remove-Item $tmpQM -Recurse -Force -ErrorAction SilentlyContinue
@@ -156,7 +160,7 @@ if ($EngineDir -and (Test-Path $EngineDir)) {
         $tmpE = Join-Path $env:TEMP ("sf-eng-" + [guid]::NewGuid().ToString("N"))
         New-Item -ItemType Directory -Force -Path $tmpE | Out-Null
         Copy-Item $_.FullName (Join-Path $tmpE $res) -Recurse -Force
-        $eZip = Join-Path $OutDir "engine-$res-$Version.zip"
+        $eZip = Join-Path $OutDir "engine-$res-$Version$PayloadSuffix.zip"
         New-Zip -SourceDir $tmpE -ZipPath $eZip
         $hash = (Get-FileHash -Algorithm SHA256 -Path $eZip).Hash.ToLower()
         $size = (Get-Item $eZip).Length

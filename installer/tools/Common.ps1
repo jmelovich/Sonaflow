@@ -15,13 +15,26 @@ function Get-ProjectRootFromTools {
     return (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
 }
 
+function Resolve-PackagePath {
+    <#
+    .SYNOPSIS Resolve a path that may be relative to the current directory or absolute.
+    #>
+    param([string]$Path)
+    if ([System.IO.Path]::IsPathRooted($Path)) {
+        return [System.IO.Path]::GetFullPath($Path)
+    }
+    return [System.IO.Path]::GetFullPath((Join-Path (Get-Location) $Path))
+}
+
 function Get-SourceVenvPath {
     <#
-    .SYNOPSIS Resolve Sonaflow's working .venv to harvest packages from.
+    .SYNOPSIS Resolve the venv to harvest packages from (dev .venv or package venv).
     #>
     param(
         [string]$ProjectRoot,
-        [string]$Explicit
+        [string]$Explicit,
+        [ValidateSet("cu128", "cu121")]
+        [string]$Cuda = "cu128"
     )
     if ($Explicit) {
         if (-not (Test-Path $Explicit)) { throw "Source venv not found: $Explicit" }
@@ -30,10 +43,12 @@ function Get-SourceVenvPath {
     if (-not $ProjectRoot) {
         $ProjectRoot = Get-ProjectRootFromTools
     }
-    $venv = Join-Path $ProjectRoot ".venv"
+    . (Join-Path $PSScriptRoot "PackageEnv.ps1")
+    $venvRel = Get-PackageVenvRelName -Cuda $Cuda
+    $venv = Join-Path $ProjectRoot $venvRel
     $python = Join-Path $venv "Scripts\python.exe"
     if (-not (Test-Path $python)) {
-        throw "Sonaflow .venv not found at $venv. Run setup.ps1 first."
+        throw "Package venv not found at $venv. Run Ensure-PackageMainEnv or Build-OfflineInstaller.ps1 -RefreshEnv first."
     }
     return (Resolve-Path $venv).Path
 }
