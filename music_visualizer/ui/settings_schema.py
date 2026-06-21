@@ -309,7 +309,7 @@ PARAM_SPECS: Tuple[ParamSpec, ...] = (
     _s("qwen_model_id", "Qwen model", "Qwen", ParamKind.TEXT, requires_restart=True,
        tooltip="HuggingFace id for Qwen2-Audio."),
     _s("qwen_python", "Sidecar Python", "Qwen", ParamKind.TEXT, requires_restart=True,
-       tooltip="Path to the sidecar venv python.exe."),
+       tooltip="Override Python for Qwen subprocess (default: main .venv)."),
     _s("qwen_window_sec", "Window (s)", "Qwen", ParamKind.FLOAT,
        min_val=1.0, max_val=60.0, step=0.5,
        tooltip="Past audio window fed to Qwen each inference."),

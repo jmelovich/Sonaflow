@@ -100,9 +100,8 @@ Poetry and a separate StreamDiffusion clone are **not** required.
 3. Creates `.venv`, installs torch from the chosen CUDA index
 4. Installs TensorRT 10 (`tensorrt-cu12` trio from NVIDIA index)
 5. Installs `music_visualizer/requirements.txt` + `compel --no-deps`
-6. Prefetches SD-Turbo + CLAP models (unless `-SkipModels`)
-7. Optionally creates `.venv-qwen` sidecar (`-Profile Full`)
-8. Writes `visualizer_settings.json`
+6. Prefetches SD-Turbo + CLAP models (unless `-SkipModels`); Full profile also prefetches Qwen2-Audio
+7. Writes `visualizer_settings.json`
 
 ### Common flags
 
@@ -112,7 +111,7 @@ Poetry and a separate StreamDiffusion clone are **not** required.
 | `-Profile Minimal\|Standard\|Full\|Auto` | Feature set |
 | `-SkipTensorRT` | Skip TensorRT install (Minimal forces this) |
 | `-SkipModels` | Skip HuggingFace prefetch |
-| `-SkipQwen` | Skip Qwen sidecar even on Full |
+| `-SkipQwen` | Skip Qwen model prefetch on Full (Qwen deps still in main `.venv`) |
 | `-SkipNativeBuild` | Skip optional DLL build |
 | `-ForceSettings` | Overwrite `visualizer_settings.json` |
 
@@ -133,7 +132,7 @@ First TensorRT run builds engines (~5–15 min), cached under `engines/` in the 
 | `.venv` not found | Run `.\setup.ps1` |
 | NumPy / TensorRT errors | Re-run `.\setup.ps1` (pins numpy 1.26.4 + TRT 10) |
 | CUDA mismatch on RTX 30/40 | `.\setup.ps1 -Cuda cu121 -ForceSettings` |
-| Qwen sidecar missing | `.\setup.ps1 -Profile Full` |
+| Qwen not working | `.\setup.ps1 -Profile Full` (deps in main `.venv`; subprocess uses same interpreter) |
 | RTX upscale fails | Install RTX Video SDK, set `NV_RTX_VIDEO_SDK` |
 
 ### Stale TensorRT engines

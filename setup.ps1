@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-    One-time setup for Sonaflow (main .venv, optional Qwen sidecar, settings).
+    One-time setup for Sonaflow (main .venv, settings).
 
 .EXAMPLE
     .\setup.ps1
@@ -39,7 +39,6 @@ $SetupDir = Join-Path $ProjectRoot "scripts\setup"
 . (Join-Path $SetupDir "Prereqs.ps1")
 . (Join-Path $SetupDir "GpuDetect.ps1")
 . (Join-Path $SetupDir "MainEnv.ps1")
-. (Join-Path $SetupDir "Sidecar.ps1")
 . (Join-Path $SetupDir "Models.ps1")
 . (Join-Path $SetupDir "Settings.ps1")
 . (Join-Path $SetupDir "NativeBuild.ps1")
@@ -86,17 +85,15 @@ if ($resolvedProfile -eq "Minimal" -and -not $SkipTensorRT) {
 Install-MainEnv -ProjectRoot $ProjectRoot -Lock $Lock -Cuda $resolvedCuda -SkipTensorRT:$SkipTensorRT
 
 if (-not $SkipModels) {
-    Write-SetupStep "Prefetching models (SD-Turbo + CLAP)"
-    Install-Models -ProjectRoot $ProjectRoot -Lock $Lock
+    $wantQwen = ($resolvedProfile -eq "Full") -and -not $SkipQwen
+    Write-SetupStep "Prefetching models (SD-Turbo + CLAP$(if ($wantQwen) { ' + Qwen' }))"
+    Install-Models -ProjectRoot $ProjectRoot -Lock $Lock -IncludeQwen:$wantQwen
 }
-
-$wantQwen = ($resolvedProfile -eq "Full") -and -not $SkipQwen
-if ($wantQwen) {
-    Write-SetupStep "Qwen2-Audio sidecar"
-    Install-Sidecar -ProjectRoot $ProjectRoot -Lock $Lock -Cuda $resolvedCuda -SkipModelDownload:$SkipModels
+elseif (-not $SkipQwen -and $resolvedProfile -eq "Full") {
+    Write-SetupWarn "Qwen model download skipped (-SkipModels); deps are in main .venv"
 }
 elseif (-not $SkipQwen -and $resolvedProfile -ne "Full") {
-    Write-SetupWarn "Qwen sidecar skipped for profile $resolvedProfile - use -Profile Full to enable"
+    Write-SetupWarn "Qwen model skipped for profile $resolvedProfile - use -Profile Full to prefetch"
 }
 
 Write-SetupStep "Settings"

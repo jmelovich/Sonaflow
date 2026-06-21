@@ -53,7 +53,7 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 [Components]
 Name: "core"; Description: "Sonaflow core (app + Python runtime)"; Types: full compact custom; Flags: fixed
 #ifdef IncludeQwen
-Name: "qwen"; Description: "Qwen2-Audio captions (sidecar runtime; model downloads on first launch)"; Types: full custom
+Name: "qwen"; Description: "Qwen2-Audio captions (model downloads on first launch; runtime included in core)"; Types: full custom
 #endif
 
 [Tasks]
@@ -69,9 +69,6 @@ Type: filesandordirs; Name: "{localappdata}\Sonaflow"
 Source: "{#PayloadDir}\core-runtime-{#AppVersion}{#CudaSuffix}.zip"; DestDir: "{tmp}"; DestName: "core-runtime.zip"; Flags: ignoreversion deleteafterinstall
 #ifdef IncludeModels
 Source: "{#PayloadDir}\models-core-{#AppVersion}{#CudaSuffix}.zip"; DestDir: "{tmp}"; DestName: "models-core.zip"; Flags: ignoreversion deleteafterinstall
-#endif
-#ifdef IncludeQwen
-Source: "{#PayloadDir}\qwen-runtime-{#AppVersion}{#CudaSuffix}.zip"; DestDir: "{tmp}"; DestName: "qwen-runtime.zip"; Flags: ignoreversion deleteafterinstall; Components: qwen
 #endif
 Source: "docs\OPTIONAL_SETUP.txt"; DestDir: "{app}\docs"; Flags: ignoreversion
 Source: "scripts\write_packaged_settings.py"; DestDir: "{app}\scripts"; Flags: ignoreversion
@@ -280,15 +277,6 @@ begin
     if FileExists(Tmp + '\models-core.zip') then
       if not ExtractZip(Tmp + '\models-core.zip', DataDir + '\models') then
         RaiseException('Failed to extract models.');
-#endif
-
-#ifdef IncludeQwen
-    if WizardIsComponentSelected('qwen') and FileExists(Tmp + '\qwen-runtime.zip') then
-    begin
-      WizardForm.StatusLabel.Caption := 'Extracting Qwen sidecar runtime...';
-      if not ExtractZip(Tmp + '\qwen-runtime.zip', ExpandConstant('{app}')) then
-        RaiseException('Failed to extract Qwen sidecar runtime.');
-    end;
 #endif
 
     WritePackagedSettings();

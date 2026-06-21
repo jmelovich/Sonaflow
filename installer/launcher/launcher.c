@@ -83,13 +83,6 @@ int wmain(void) {
     SetEnvironmentVariableW(L"HF_HOME", modelsDir);
     SetEnvironmentVariableW(L"SONAFLOW_ENGINE_DIR", enginesDir);
 
-    /* Optional Qwen sidecar (separate component); only point at it if present. */
-    wchar_t qwenPy[MAX_PATH];
-    join(qwenPy, MAX_PATH, root, L"runtime\\qwen-env\\python.exe");
-    if (GetFileAttributesW(qwenPy) != INVALID_FILE_ATTRIBUTES) {
-        SetEnvironmentVariableW(L"SONAFLOW_QWEN_PYTHON", qwenPy);
-    }
-
     /* Build child command line: "python.exe" "main.py" <forwarded args...> */
     const wchar_t *forwarded = args_after_exe(GetCommandLineW());
     size_t cap = wcslen(pythonExe) + wcslen(mainPy) + wcslen(forwarded) + 16;

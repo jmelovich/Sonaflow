@@ -79,7 +79,7 @@ Sonaflow/
 │   ├── analysis/          # CLAP, Qwen client
 │   ├── generation/        # StreamDiffusion, RTX VSR
 │   ├── display/           # OpenCV / GL presenter
-│   └── qwen_sidecar/      # Isolated Qwen2-Audio server
+│   └── qwen_sidecar/      # Qwen2-Audio subprocess server (same .venv)
 └── docs/
     └── SETUP.md           # Full install guide + troubleshooting
 ```
@@ -102,7 +102,7 @@ Optional: point `$env:STREAMDIFFUSION_PATH` at an external checkout to shadow th
 |---------|-----|
 | Setup / import errors | Run `.\setup.ps1` |
 | NumPy / TensorRT build errors | Pinned to numpy 1.26.4 — re-run `.\run.ps1` or see SETUP.md |
-| Qwen sidecar missing | `.\setup.ps1 -Profile Full` |
+| Qwen not working | `.\setup.ps1 -Profile Full`; sidecar uses main `.venv` |
 | RTX upscale fails | Install RTX Video SDK, set `NV_RTX_VIDEO_SDK` |
 
 Full details: [`docs/SETUP.md`](./docs/SETUP.md).

@@ -44,8 +44,7 @@ Freeze both Python environments, prebuild native DLLs, pre-bundle the small mode
 │   ├── music_visualizer\...             # this repo's python package
 │   └── streamdiffusion\...              # vendored StreamDiffusion package (Apache 2.0)
 ├── runtime\
-│   ├── main-env\python.exe + Lib\site-packages\   # torch cu128, streamdiffusion, TensorRT, opencv, aubio, ...
-│   └── qwen-env\python.exe  + Lib\site-packages\   # OPTIONAL component (transformers 4.45, bitsandbytes, ...)
+│   └── main-env\python.exe + Lib\site-packages\   # torch, streamdiffusion, TensorRT, Qwen deps, ...
 ├── native\
 │   ├── glpresent_bridge.dll
 │   └── rtxvsr_bridge.dll                     # only meaningful if user supplies RTX Video SDK
@@ -63,25 +62,24 @@ Mutable paths are passed to the app via the launcher (env + settings) so **nothi
 
 ---
 
-## 4. Freezing the two Python environments
+## 4. Freezing the Python environment
 
-The app needs **two** Python 3.10 environments (they have conflicting `transformers` pins and must stay separate):
+A single **main-env** runs the app and the Qwen sidecar subprocess:
 
-- **main-env** — runs `main.py`: `torch` cu128, `streamdiffusion`, TensorRT 10, `onnxruntime`, `diffusers 0.24`, `transformers 4.36.2`, `numpy 1.26.4`, `compel`, `torchaudio`, `aubio`, `opencv`, `sounddevice`, `PyAudioWPatch`.
-- **qwen-env** (`.venv-qwen` today) — sidecar subprocess: `torch` cu128, `transformers 4.45+`, `accelerate`, `bitsandbytes`, `librosa`, `soundfile`.
+- **main-env** — `torch` cu128/cu121, `streamdiffusion`, TensorRT 10, `onnxruntime`, `diffusers 0.24`, `transformers 4.46+`, `numpy 1.26.4`, `compel`, `torchaudio`, `aubio`, `opencv`, `sounddevice`, `PyAudioWPatch`, `librosa`, `bitsandbytes`.
 
-### Make them relocatable
-Standard venvs hardcode absolute paths (`pyvenv.cfg`, shebangs, `activate`) and break when moved. Build each env on a **standalone, relocatable CPython** from [python-build-standalone](https://github.com/astral-sh/python-build-standalone) (`cpython-3.10 … install_only`, Windows x64), then install packages into its `Lib\site-packages`.
+### Make it relocatable
+Standard venvs hardcode absolute paths (`pyvenv.cfg`, shebangs, `activate`) and break when moved. Build the env on a **standalone, relocatable CPython** from [python-build-standalone](https://github.com/astral-sh/python-build-standalone) (`cpython-3.10 … install_only`, Windows x64), then install packages into its `Lib\site-packages`.
 
 Relocation rules:
-- We **never rely on activation** — the launcher and the existing code call interpreters by explicit path (`runtime\main-env\python.exe`, and `qwen_python`/`resolved_qwen_python()` for the sidecar). So no `activate`/shebang fixups needed.
+- We **never rely on activation** — the launcher and the existing code call the interpreter by explicit path (`runtime\main-env\python.exe` for both the app and Qwen sidecar). So no `activate`/shebang fixups needed.
 - **Avoid editable installs.** Install `streamdiffusion` as a built wheel (`pip install <sd_repo>`), not `-e`, so no absolute `.pth`/`.egg-link` is baked in. Keep the SD source tree bundled separately only for assets it reads at runtime.
 - Verify no absolute paths remain: grep `site-packages` for the build-machine path; fail the build if any are found.
 
 ### Harvest procedure (build machine)
-1. `setup.ps1 -Profile Full` to create `.venv` (+ optional `.venv-qwen`).
+1. `setup.ps1 -Profile Full` to create `.venv` (includes Qwen deps).
 2. `Freeze-Env.ps1` copies `.venv` site-packages onto standalone CPython and embeds the vendored `streamdiffusion/` package.
-3. Smoke-test imports; scan for leaked build-machine paths.
+3. Smoke-test imports (including Qwen/transformers); scan for leaked build-machine paths.
 
 ---
 
@@ -97,7 +95,7 @@ This **replaces `run.ps1` + Poetry entirely**. The pip-probe/repair logic in `ru
 
 App-side config wiring (small changes in this repo):
 - `engine_dir` → `%LOCALAPPDATA%\Sonaflow\engines`
-- `qwen_python` → `<install>\runtime\qwen-env\Scripts\python.exe` (only set when the Qwen component is installed)
+- `qwen_python` → `<install>\runtime\main-env\python.exe` (same interpreter as the app; override only)
 - settings file path → mutable data dir
 These are all already configurable via `Config` / `visualizer_settings.json` — packaged mode just supplies packaged defaults.
 
@@ -167,7 +165,7 @@ On the RTX 50 build box, for each resolution we want to pre-cache: run the app o
 |---|---|---|
 | SD-Turbo | ~2.5 GB | **Bundled** (core download), placed in `models\` HF cache |
 | CLAP `larger_clap_music` | ~1.5 GB | **Bundled** (core download) |
-| Qwen2-Audio-7B-Instruct | ~16 GB | **Optional** component / on-demand download into `models\`; only with `qwen-env` |
+| Qwen2-Audio-7B-Instruct | ~16 GB | **Optional** component / on-demand download into `models\` |
 
 Harvest = copy the content-addressed `~/.cache/huggingface/hub/models--...` snapshots into the packaged `models\` archive. Runtime sets `HF_HOME` so resolution is offline.
 
@@ -190,7 +188,7 @@ The distributed `Sonaflow-Setup.exe` is small (just the bootstrapper). At runtim
 3. **Download** versioned payloads from the release host (resumable, sha256-verified):
    - `core-runtime` (main-env + app + streamdiffusion + native DLLs)
    - `models-core` (SD-Turbo + CLAP)
-   - `qwen` (qwen-env + Qwen model) — only if selected
+   - `qwen` (enable captions + optional bundled model) — only if selected
    - matching **engine archive** for chosen resolution if present (§6.3)
 4. **Lay down** the install tree (§3), write `visualizer_settings.json` with packaged defaults + chosen resolution, generate launcher config.
 5. **Shortcuts** (Start Menu + optional desktop) → `Sonaflow.exe`; register uninstaller.
@@ -223,7 +221,7 @@ The distributed `Sonaflow-Setup.exe` is small (just the bootstrapper). At runtim
 
 ```
 1. setup.ps1 -Profile Full                    # known-good deps + model cache
-2. tools/freeze_env.ps1                        # build relocatable main-env (+ qwen-env)
+2. tools/freeze_env.ps1                        # build relocatable main-env
 3. tools/build_native.ps1                      # compile glpresent/rtxvsr DLLs
 4. tools/harvest_models.ps1                    # copy SD-Turbo/CLAP (and Qwen) HF snapshots
 5. tools/build_engines.ps1 -Res 1216x512,896x512   # prebuild + zip TRT engines
@@ -251,6 +249,6 @@ The distributed `Sonaflow-Setup.exe` is small (just the bootstrapper). At runtim
 1. **M1 — Frozen runtime + launcher (offline, single machine).** Relocatable main-env, launcher exe, packaged-mode config, runs locally from the install layout. *(Proves the freeze works.)*
 2. **M2 — Inno bootstrapper + core payload hosting.** Prereq checks, component UI, resolution prompt, download/extract/lay-down, shortcuts, uninstaller, first-run engine build.
 3. **M3 — Remote engine cache.** Manifest + prebuilt engines for common resolutions + runtime rebuild fallback.
-4. **M4 — Qwen optional component.** qwen-env payload + on-demand model fetch.
+4. **M4 — Qwen optional component.** Enable captions in settings; model fetched on demand.
 5. **M5 — Polish.** Code signing, updates/versioning, broader-RTX scaffolding (§9).
 ```

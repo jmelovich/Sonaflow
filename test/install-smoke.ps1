@@ -72,7 +72,7 @@ try {
     $vizDest = Join-Path $WorkRoot "Sonaflow"
     if (Test-Path $vizDest) { Remove-Item $vizDest -Recurse -Force }
     Write-Log "Copying Sonaflow to $vizDest"
-    robocopy $RepoRoot $vizDest /E /XD .git .venv .venv-qwen .cursor engines "test\sandbox\logs" "test\smoke-results" `
+    robocopy $RepoRoot $vizDest /E /XD .git .venv .cursor engines "test\sandbox\logs" "test\smoke-results" `
         /XF visualizer_settings.json *.dll /NFL /NDL /NJH /NJS /nc /ns /np | Out-Null
     if ($LASTEXITCODE -ge 8) { throw "robocopy Sonaflow failed (exit $LASTEXITCODE)" }
     Add-Step "Stage Sonaflow copy" $true $vizDest

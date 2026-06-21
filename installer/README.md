@@ -23,8 +23,7 @@ installer/
 
 ## Prerequisites (build machine)
 
-- A working dev setup: `..\setup.ps1 -Profile Full` (or at least Standard) so
-  `.venv` exists to harvest from.
+- A working dev setup: `..\setup.ps1 -Profile Full` so `.venv` includes Qwen deps.
 - Visual Studio Build Tools with **Desktop development with C++** (to compile the
   launcher; same toolchain the native DLLs use).
 - Internet access (downloads a ~30 MB standalone CPython once).
@@ -36,7 +35,7 @@ installer/
 
 ```powershell
 cd H:\_dev\Sonaflow
-.\setup.ps1 -Profile Full          # creates .venv with torch + TensorRT
+.\setup.ps1 -Profile Full          # creates .venv with torch + TensorRT + Qwen deps
 
 cd installer\tools
 .\Freeze-Env.ps1 -Dest ..\build\runtime\main-env
@@ -61,13 +60,13 @@ launching `runtime\main-env\python.exe app\music_visualizer\main.py`:
 | `SONAFLOW_DATA_DIR` | `%LOCALAPPDATA%\Sonaflow` | `utils/paths.py` (settings location) |
 | `HF_HOME` | `<data>\models` | huggingface model cache |
 | `SONAFLOW_ENGINE_DIR` | `<data>\engines` | `config.resolved_engine_dir` |
-| `SONAFLOW_QWEN_PYTHON` | `<install>\runtime\qwen-env\python.exe` (if present) | `config.resolved_qwen_python` |
 
-The working directory is set to `<install>\app`, matching how `main.py` bootstraps imports.
+The Qwen sidecar subprocess uses the same `runtime\main-env\python.exe` (via
+`config.resolved_qwen_python()`). The working directory is set to `<install>\app`.
 
 ## Milestone 2 — offline installer (use this now)
 
-**No remote host required.** One EXE bundles the staged app + runtimes. Public models
+**No remote host required.** One EXE bundles the staged app + runtime. Public models
 download from Hugging Face on first launch. Copy the installer to another PC and run it.
 
 ```
@@ -92,6 +91,9 @@ cd installer\tools
 
 # Force rebuild package venv + stage + payloads
 .\Build-OfflineInstaller.ps1 -Version 0.1.0 -Cuda cu121 -RefreshEnv -RefreshStage
+
+# Skip Qwen installer component (captions disabled in default settings)
+.\Build-OfflineInstaller.ps1 -Version 0.1.0 -SkipQwen
 ```
 
 | `-Cuda` | Package venv | Stage dir | Output |
@@ -99,13 +101,11 @@ cd installer\tools
 | `cu128` (default) | `.venv` | `build/stage` | `build/dist/Sonaflow-Setup-0.1.0-offline/` |
 | `cu121` | `.venv-cu121` | `build/stage-cu121` | `build/dist/Sonaflow-Setup-0.1.0-cu121-offline/` |
 
-Qwen sidecar venvs follow the same pattern: `.venv-qwen` vs `.venv-qwen-cu121`.
-
 **Two phases (do not confuse with a hang):**
 
 | Phase | What | Typical time |
 |---|---|---|
-| 1. Payload ZIPs | `core-runtime` (+ optional `qwen-runtime`) in `build\payloads\` | ~15–30 min |
+| 1. Payload ZIPs | `core-runtime` (+ optional bundled models) in `build\payloads\` | ~15–30 min |
 | 2. ISCC compile | Embeds those ZIPs (no re-compression) | ~1–5 min |
 
 Use `-ReusePayloads` to skip phase 1 if zips already exist. Use `-BundleModels` only
@@ -114,16 +114,16 @@ if you need a fully offline install with models embedded (~+4 GB).
 Output: `installer\build\dist\Sonaflow-Setup-<ver>-offline\` (or `...\Sonaflow-Setup-<ver>-cu121-offline\`) containing the `.exe` and any `.bin` files.
 
 **Copy that entire subfolder** to the target PC and run the `.exe`. Internet is
-**required on first launch** to download public models.
+**required on first launch** to download public models (including Qwen if enabled).
 
 ### What the offline installer does
 
 1. **Prereqs** — warns if `nvidia-smi` is missing; RTX-50 notice for other GPUs.
 2. **Resolution page** — snaps to generation size (same logic as `utils/resolution.py`).
-3. **Installs** — app (including vendored `streamdiffusion`) + frozen runtime + native DLLs →
+3. **Installs** — app (including vendored `streamdiffusion`) + frozen main-env + native DLLs →
    `%LOCALAPPDATA%\Programs\Sonaflow`.
 4. **Settings** — writes `visualizer_settings.json` with generation size snapped from
-   your display resolution.
+   your display resolution; optional Qwen component sets `qwen=true`.
 5. **VC++ runtime** — installed silently from bundled `vc_redist.x64.exe` if missing.
 6. **Shortcuts + uninstaller** — Start Menu, optional desktop, uninstaller.
 

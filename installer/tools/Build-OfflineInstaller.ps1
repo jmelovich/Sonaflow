@@ -70,8 +70,6 @@ param(
 
     [switch]$RefreshEnv,
 
-    [switch]$RefreshQwen,
-
     [switch]$RefreshStage,
 
     [switch]$ReusePayloads,
@@ -221,155 +219,35 @@ if ($includeModels) {
 
 $includeQwen = -not $SkipQwen
 
-$QwenEnvDir = $paths.QwenEnvDir
-
-
-
-if ($includeQwen) {
-
-    try {
-
-        $null = Ensure-PackageQwenEnv -ProjectRoot $ProjectRoot -Cuda $Cuda -Refresh:($RefreshQwen -or $RefreshEnv) -SkipModelDownload
-
-    }
-
-    catch {
-
-        Write-Warn2 $_.Exception.Message
-
-        Write-Warn2 "Continuing without Qwen component."
-
-        $includeQwen = $false
-
-    }
-
-
-
-    if ($includeQwen -and (-not (Test-Path $QwenEnvDir) -or $RefreshQwen -or $RefreshStage)) {
-
-        Write-Step "Freezing Qwen sidecar runtime ($Cuda)"
-
-        if ((Test-Path $QwenEnvDir) -and ($RefreshQwen -or $RefreshStage)) {
-
-            Remove-Item $QwenEnvDir -Recurse -Force -ErrorAction SilentlyContinue
-
-        }
-
-        & (Join-Path $ScriptDir "Freeze-QwenEnv.ps1") -ProjectRoot $ProjectRoot -Cuda $Cuda -Dest $QwenEnvDir
-
-    }
-
-    elseif ($includeQwen) {
-
-        Write-Ok "Frozen qwen-env: $QwenEnvDir"
-
-    }
-
-}
-
-
-
 $coreZip = $paths.CoreZip
-
 $modelsZip = $paths.ModelsZip
-
-$qwenZip = $paths.QwenZip
-
 $needPayloads = -not $ReusePayloads
-
 if ($ReusePayloads) {
-
     if (-not (Test-Path $coreZip)) { $needPayloads = $true }
-
     if ($includeModels -and -not (Test-Path $modelsZip)) { $needPayloads = $true }
-
-    if ($includeQwen -and -not (Test-Path $qwenZip)) { $needPayloads = $true }
-
     if (-not $needPayloads) { Write-Ok "Reusing existing payload zips in $PayloadDir" }
-
 }
-
-
 
 if ($needPayloads) {
-
-    $onlyQwen = (Test-Path $coreZip) -and ((-not $includeModels) -or (Test-Path $modelsZip)) -and $includeQwen -and (-not (Test-Path $qwenZip))
-
-    if ($onlyQwen) {
-
-        Write-Step "Packaging qwen-runtime zip only (core/models payloads reused)"
-
-        Add-Type -AssemblyName System.IO.Compression.FileSystem
-
-        $tmpQ = Join-Path $env:TEMP ("sf-qwen-" + [guid]::NewGuid().ToString("N"))
-
-        $qDst = Join-Path $tmpQ "runtime\qwen-env"
-
-        New-Item -ItemType Directory -Force -Path (Split-Path $qDst) | Out-Null
-
-        Copy-Item $QwenEnvDir $qDst -Recurse -Force
-
-        $part = "$qwenZip.part"
-
-        if (Test-Path $part) { Remove-Item $part -Force -ErrorAction SilentlyContinue }
-
-        if (Test-Path $qwenZip) { Remove-Item $qwenZip -Force -ErrorAction SilentlyContinue }
-
-        [System.IO.Compression.ZipFile]::CreateFromDirectory(
-
-            $tmpQ, $part, [System.IO.Compression.CompressionLevel]::Optimal, $false)
-
-        Move-Item $part $qwenZip -Force
-
-        Remove-Item $tmpQ -Recurse -Force -ErrorAction SilentlyContinue
-
-        Write-Ok "qwen-runtime -> $(Split-Path $qwenZip -Leaf)"
-
+    Write-Step "Creating payload ZIPs"
+    $payloadArgs = @{
+        StageDir       = $StageDir
+        Version        = $Version
+        BaseUrl        = "local"
+        OutDir         = $PayloadDir
+        GeneratedDir   = (Join-Path $InstallerRoot "generated")
+        PayloadSuffix  = $paths.PayloadSuffix
+        TorchCu        = $Cuda
     }
-
-    else {
-
-        Write-Step "Creating payload ZIPs"
-
-        $payloadArgs = @{
-
-            StageDir       = $StageDir
-
-            Version        = $Version
-
-            BaseUrl        = "local"
-
-            OutDir         = $PayloadDir
-
-            GeneratedDir   = (Join-Path $InstallerRoot "generated")
-
-            PayloadSuffix  = $paths.PayloadSuffix
-
-            TorchCu        = $Cuda
-
-        }
-
-        if ($Cuda -eq "cu121") { $payloadArgs['GpuArch'] = "sm_89" }
-
-        if ($includeModels) { $payloadArgs['ModelsHubDir'] = $ModelsHubDir }
-
-        if ($includeQwen) { $payloadArgs['QwenEnvDir'] = $QwenEnvDir }
-
-        & (Join-Path $ScriptDir "Build-Payloads.ps1") @payloadArgs
-
-        if (-not (Test-Path $coreZip)) { throw "Build-Payloads did not produce $coreZip" }
-
-    }
-
+    if ($Cuda -eq "cu121") { $payloadArgs['GpuArch'] = "sm_89" }
+    if ($includeModels) { $payloadArgs['ModelsHubDir'] = $ModelsHubDir }
+    if ($includeQwen) { $payloadArgs['IncludeQwen'] = $true }
+    & (Join-Path $ScriptDir "Build-Payloads.ps1") @payloadArgs
+    if (-not (Test-Path $coreZip)) { throw "Build-Payloads did not produce $coreZip" }
 }
-
 else {
-
     if (-not (Test-Path $coreZip)) { throw "Missing $coreZip" }
-
 }
-
-
 
 # --- VC++ redist ---
 

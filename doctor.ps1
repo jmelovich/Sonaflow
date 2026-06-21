@@ -116,12 +116,14 @@ if (-not (Test-Path $settingsPath)) {
 }
 
 Write-Host ""
-Write-Host "Qwen sidecar" -ForegroundColor White
-$qwenPython = Join-Path $ProjectRoot ".venv-qwen\Scripts\python.exe"
-Test-Doctor "Sidecar venv (.venv-qwen)" { Test-Path $qwenPython } -Optional
-if (Test-Path $qwenPython) {
-    Test-Doctor 'Sidecar imports (transformers, bitsandbytes)' {
-        & $qwenPython -c 'import transformers, bitsandbytes' 2>$null | Out-Null
+Write-Host "Qwen2-Audio" -ForegroundColor White
+if (Test-Path $venvPython) {
+    Test-Doctor "transformers >= 4.45 (main venv)" {
+        & $venvPython -c 'import transformers; v=tuple(int(x) for x in transformers.__version__.split(".")[:2]); exit(0 if v>=(4,45) else 1)' 2>$null | Out-Null
+        $LASTEXITCODE -eq 0
+    } -Optional
+    Test-Doctor "Qwen imports (transformers, bitsandbytes, Qwen2Audio)" {
+        & $venvPython -c 'import transformers, bitsandbytes; from transformers import Qwen2AudioForConditionalGeneration' 2>$null | Out-Null
         $LASTEXITCODE -eq 0
     } -Optional
 }
@@ -145,11 +147,11 @@ if ($Lock -and (Test-Path $venvPython)) {
             $LASTEXITCODE -eq 0
         } -Optional
     }
-    if (Test-Path $qwenPython) {
+    if ($Lock.qwen_model) {
         Test-Doctor "Model cached: $($Lock.qwen_model)" {
             $qid = $Lock.qwen_model
             $py = ('from huggingface_hub import try_to_load_from_cache; import sys; r=try_to_load_from_cache("{0}", "config.json"); sys.exit(0 if r else 1)' -f $qid)
-            & $qwenPython -c $py 2>$null | Out-Null
+            & $venvPython -c $py 2>$null | Out-Null
             $LASTEXITCODE -eq 0
         } -Optional
     }

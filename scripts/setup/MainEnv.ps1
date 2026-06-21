@@ -7,7 +7,7 @@ function Get-VenvPython {
     )
     $py = Join-Path $ProjectRoot (Join-Path $VenvRelName "Scripts\python.exe")
     if (-not (Test-Path $py)) {
-        throw "Python venv not found at $py — run setup.ps1 first."
+        throw "Python venv not found at $py - run setup.ps1 first."
     }
     return (Resolve-Path $py).Path
 }
@@ -74,7 +74,7 @@ function Install-MainEnv {
             "tensorrt-cu12-bindings==10.16.1.11" `
             --extra-index-url https://pypi.nvidia.com
         if ($LASTEXITCODE -ne 0) {
-            throw "TensorRT install failed — try -SkipTensorRT or see docs/SETUP.md"
+            throw "TensorRT install failed - try -SkipTensorRT or see docs/SETUP.md"
         }
         Write-SetupOk "TensorRT 10 installed"
     }
@@ -100,8 +100,12 @@ function Install-MainEnv {
     $env:PYTHONPATH = $ProjectRoot
     & $python -c @"
 import numpy, torch, streamdiffusion, cv2, aubio, sounddevice, soundfile
+import transformers
+from transformers import ClapModel, Qwen2AudioForConditionalGeneration
+import compel
 from music_visualizer.generation.sd_wrapper import StreamDiffusionWrapper
-print('imports ok', torch.__version__, numpy.__version__)
+assert tuple(int(x) for x in transformers.__version__.split('.')[:2]) >= (4, 45)
+print('imports ok', torch.__version__, numpy.__version__, transformers.__version__)
 "@
     if ($LASTEXITCODE -ne 0) {
         throw "Import smoke test failed."

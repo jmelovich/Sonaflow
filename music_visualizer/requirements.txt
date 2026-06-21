@@ -1,33 +1,74 @@
 # Sonaflow main environment (Python 3.10).
+
 # setup.ps1 installs torch/torchvision/torchaudio from the chosen CUDA index,
+
 # then tensorrt-cu12 10.x from https://pypi.nvidia.com, then this file, then
+
 # compel==2.0.3 with --no-deps.
 
+
+
 # --- StreamDiffusion core (vendored under ../streamdiffusion/) ---
+
 diffusers==0.24.0
-transformers==4.36.2
+
+transformers==4.46.3
+
 huggingface-hub==0.25.2
+
 numpy==1.26.4
+
 accelerate
+
 fire
+
 omegaconf
+
 protobuf==3.20.2
+
 cuda-python
+
 onnx==1.16.1
+
 onnxruntime==1.16.3
+
 onnxscript
+
 polygraphy
+
 onnx-graphsurgeon
+
 colored
+
 pywin32; sys_platform == "win32"
 
+
+
 # --- Sonaflow visualizer ---
+
 opencv-python>=4.9.0,<4.12
+
 aubio>=0.4.9
+
 sounddevice>=0.4.6
+
 soundfile>=0.12.1
+
 PyAudioWPatch>=0.2.12; sys_platform == "win32"
+
 Pillow
+
 pyparsing>=3.0
 
+
+
+# --- Qwen2-Audio (same venv; sidecar subprocess for GPU isolation) ---
+
+librosa>=0.10.0
+
+bitsandbytes>=0.43.0
+
+
+
 # compel==2.0.3 installed separately with --no-deps (see setup.ps1)
+

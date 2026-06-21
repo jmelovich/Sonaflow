@@ -239,7 +239,7 @@ def build_config(argv: list[str] | None = None) -> Config:
     qwen = p.add_argument_group("qwen (Qwen2-Audio sidecar captioning)")
     qwen.add_argument(
         "--qwen", dest="qwen", action="store_true", default=None,
-        help="Enable Qwen2-Audio caption injection (requires sidecar venv).",
+        help="Enable Qwen2-Audio caption injection (uses main .venv subprocess).",
     )
     qwen.add_argument(
         "--no-qwen", dest="qwen", action="store_false", default=None,
@@ -248,7 +248,7 @@ def build_config(argv: list[str] | None = None) -> Config:
     qwen.add_argument("--qwen-model", dest="qwen_model_id", default=None)
     qwen.add_argument(
         "--qwen-python", dest="qwen_python", default=None,
-        help="Python interpreter for the sidecar venv (default: .venv-qwen).",
+        help="Python interpreter for the Qwen sidecar subprocess (default: main .venv).",
     )
     qwen.add_argument(
         "--qwen-window", dest="qwen_window_sec", type=float, default=None,

@@ -1,6 +1,6 @@
 """Qwen2-Audio sidecar TCP server.
 
-Run inside the isolated ``.venv-qwen`` venv::
+Run as a subprocess from the main app (same ``.venv``)::
 
     python -m music_visualizer.qwen_sidecar.server [--model MODEL] [--4bit]
 

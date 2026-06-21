@@ -14,7 +14,6 @@
     Archive internal layouts (so the installer extracts to clean targets):
       core-runtime-<ver>.zip   -> {app}            (Sonaflow.exe, app\, runtime\main-env\, native\)
       models-core-<ver>.zip    -> {data}\models    (hub\models--stabilityai--sd-turbo, --madebyollin--taesd, --laion--larger_clap_music)
-      qwen-runtime-<ver>.zip    -> {app}            (runtime\qwen-env\)            [optional]
       qwen-model-<ver>.zip      -> {data}\models    (hub\models--Qwen--Qwen2-Audio-7B-Instruct) [optional]
       engine-<res>-<ver>.zip    -> {data}\engines   (<res>\<descriptor>\unet.engine + .built_resolution)
 
@@ -34,9 +33,9 @@ param(
         "models--madebyollin--taesd",
         "models--laion--larger_clap_music"
     ),
-    [string]$QwenEnvDir,
     [string]$QwenModelHubDir,
     [string]$QwenModel = "models--Qwen--Qwen2-Audio-7B-Instruct",
+    [switch]$IncludeQwen,
     [string]$EngineDir,
     [string]$OutDir = (Join-Path $PSScriptRoot "..\build\dist"),
     [string]$GeneratedDir = (Join-Path $PSScriptRoot "..\generated"),
@@ -122,20 +121,8 @@ else {
     Write-Warn2 "No -ModelsHubDir given/found - skipping models-core payload."
 }
 
-# --- optional qwen runtime ---
-$qwenAvailable = $false
-if ($QwenEnvDir -and (Test-Path $QwenEnvDir)) {
-    Write-Step "Packaging qwen-runtime"
-    $tmpQ = Join-Path $env:TEMP ("sf-qwen-" + [guid]::NewGuid().ToString("N"))
-    $qDst = Join-Path $tmpQ "runtime\qwen-env"
-    New-Item -ItemType Directory -Force -Path (Split-Path $qDst) | Out-Null
-    Copy-Item $QwenEnvDir $qDst -Recurse -Force
-    $qZip = Join-Path $OutDir "qwen-runtime-$Version$PayloadSuffix.zip"
-    New-Zip -SourceDir $tmpQ -ZipPath $qZip
-    Add-Payload -Id "qwen-runtime" -ZipPath $qZip
-    Remove-Item $tmpQ -Recurse -Force -ErrorAction SilentlyContinue
-    $qwenAvailable = $true
-}
+# --- optional qwen model (runtime deps live in main-env) ---
+$qwenAvailable = [bool]$IncludeQwen
 
 if ($QwenModelHubDir -and (Test-Path (Join-Path $QwenModelHubDir $QwenModel))) {
     Write-Step "Packaging qwen-model"
@@ -213,7 +200,7 @@ function Emit-Define {
 }
 [void](Emit-Define "core-runtime" "CoreRuntime")
 if (Emit-Define "models-core" "ModelsCore") { [void]$sb.AppendLine("#define HaveModelsCore") }
-if (Emit-Define "qwen-runtime" "QwenRuntime") { [void]$sb.AppendLine("#define HaveQwen") }
+if ($qwenAvailable) { [void]$sb.AppendLine("#define HaveQwen") }
 [void](Emit-Define "qwen-model" "QwenModel")
 $payloadsIss = Join-Path $GeneratedDir "payloads.iss"
 Set-Content -Path $payloadsIss -Value $sb.ToString() -Encoding ASCII

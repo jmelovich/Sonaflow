@@ -117,7 +117,7 @@ Get-ChildItem $destSitePackages -Filter "*.pth" -ErrorAction SilentlyContinue | 
 Write-Step "Smoke-testing the frozen environment"
 $probe = @"
 import sys
-mods = ['numpy', 'torch', 'streamdiffusion', 'cv2', 'aubio', 'sounddevice', 'soundfile', 'compel']
+mods = ['numpy', 'torch', 'streamdiffusion', 'cv2', 'aubio', 'sounddevice', 'soundfile', 'compel', 'transformers', 'bitsandbytes']
 ok = True
 for m in mods:
     try:
@@ -126,6 +126,12 @@ for m in mods:
     except Exception as e:
         ok = False
         print('  import', m, 'FAILED:', repr(e))
+try:
+    from transformers import Qwen2AudioForConditionalGeneration
+    print('  import Qwen2AudioForConditionalGeneration OK')
+except Exception as e:
+    ok = False
+    print('  import Qwen2AudioForConditionalGeneration FAILED:', repr(e))
 try:
     import torch
     print('  torch', torch.__version__, 'cuda_avail=', torch.cuda.is_available())

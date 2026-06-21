@@ -9,7 +9,7 @@ built on your exact GPU.
 
 ALREADY HANDLED BY THIS INSTALLER
 ---------------------------------
-  • Sonaflow application + frozen Python runtime
+  • Sonaflow application + frozen Python runtime (includes Qwen Python deps)
   • Generation resolution matched to your display (written to settings)
   • Start Menu shortcut and uninstaller
   • Visual C++ runtime (installed automatically if missing)
@@ -84,11 +84,11 @@ RTX VIDEO SDK — 4K UPSCALING (OPTIONAL — NOT BUNDLED)
   only the RTX upscaling step is skipped.
 
 
-QWEN2-AUDIO CAPTIONS (OPTIONAL RUNTIME — MODEL DOWNLOADED ONLINE)
----------------------------------------------------------------
-  If you selected the Qwen component, the installer includes the Qwen2-Audio sidecar
-  runtime (~5 GB). The caption model itself (~16 GB) downloads from Hugging Face on
-  first launch when Qwen captions are enabled.
+QWEN2-AUDIO CAPTIONS (OPTIONAL — MODEL DOWNLOADED ONLINE)
+---------------------------------------------------------
+  If you selected the Qwen component, Qwen2-Audio captioning is enabled in your
+  settings. The Python dependencies are included in the main runtime; only the
+  caption model itself (~16 GB) downloads from Hugging Face on first launch.
 
   The model is saved to:
 

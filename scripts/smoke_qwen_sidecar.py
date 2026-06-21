@@ -14,12 +14,12 @@ sys.path.insert(0, str(ROOT))
 
 from music_visualizer.analysis.qwen_protocol import recv_response, send_request  # noqa: E402
 
-PYTHON = ROOT / ".venv-qwen" / "Scripts" / "python.exe"
+PYTHON = ROOT / ".venv" / "Scripts" / "python.exe"
 
 
 def main() -> int:
     if not PYTHON.is_file():
-        print("Sidecar venv missing; run setup_sidecar.ps1 first.", file=sys.stderr)
+        print("Main venv missing; run .\\setup.ps1 -Profile Full first.", file=sys.stderr)
         return 1
 
     proc = subprocess.Popen(

@@ -1,1 +1,1 @@
-"""Isolated Qwen2-Audio sidecar (runs in its own venv)."""
+"""Qwen2-Audio sidecar (subprocess; same venv as the main app)."""

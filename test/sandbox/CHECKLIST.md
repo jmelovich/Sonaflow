@@ -108,7 +108,7 @@ Closing the sandbox discards all state. Re-run from step 1 to regression-test af
 | Prereqs only | any | `doctor.ps1` reports missing tools before setup |
 | `setup.ps1 -Profile Minimal -SkipModels` | Minimal | Completes; no Qwen sidecar |
 | `setup.ps1 -Profile Standard` | Standard | TensorRT group installed; CLAP model prefetch |
-| `setup.ps1 -Profile Full` | Full | Sidecar venv + Qwen download (unless `-SkipModels`) |
+| `setup.ps1 -Profile Full` | Full | Qwen model prefetch (unless `-SkipModels`; deps in main `.venv`) |
 | `doctor.ps1` | any | Pass for installed components; warnings for optional RTX SDK / DLLs |
 | `run.ps1 --benchmark 5` | Minimal | Exits with FPS line, no crash |
 

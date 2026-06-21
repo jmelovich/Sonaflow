@@ -1,7 +1,7 @@
 """Qwen2-Audio sidecar client + free-running orchestrator thread.
 
-Spawns the isolated sidecar subprocess, sends rolling audio windows over TCP,
-and publishes ``"<anchor>, <caption>"`` into the shared base prompt.
+Spawns the sidecar subprocess (same .venv as the main app), sends rolling audio
+windows over TCP, and publishes ``"<anchor>, <caption>"`` into the shared base prompt.
 """
 
 from __future__ import annotations
@@ -45,7 +45,7 @@ class QwenSidecarClient:
         if not Path(python).is_file():
             raise FileNotFoundError(
                 f"Qwen sidecar Python not found: {python}\n"
-                "Install the Qwen component, or run with --no-qwen."
+                "Run setup.ps1 -Profile Full, or run with --no-qwen."
             )
 
         cmd = [

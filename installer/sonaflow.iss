@@ -226,7 +226,6 @@ begin
 #ifdef HaveQwen
   if IsComponentSelected('qwen') then
   begin
-    DownloadPage.Add('{#QwenRuntimeUrl}', 'qwen-runtime.zip', '{#QwenRuntimeSha}');
     #ifdef QwenModelUrl
     DownloadPage.Add('{#QwenModelUrl}', 'qwen-model.zip', '{#QwenModelSha}');
     #endif
@@ -309,9 +308,7 @@ begin
     if FileExists(Tmp + '\models-core.zip') then
       ExtractZip(Tmp + '\models-core.zip', DataDir + '\models');
 
-    // Qwen (optional)
-    if FileExists(Tmp + '\qwen-runtime.zip') then
-      ExtractZip(Tmp + '\qwen-runtime.zip', ExpandConstant('{app}'));
+    // Qwen model (optional; runtime deps are in core main-env)
     if FileExists(Tmp + '\qwen-model.zip') then
       ExtractZip(Tmp + '\qwen-model.zip', DataDir + '\models');
 

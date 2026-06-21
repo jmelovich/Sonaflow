@@ -183,13 +183,13 @@ class Config:
     clap_calib_spike_guard: float = 0.05
     clap_vocab_path: Optional[str] = None  # JSON array override for the vocab
 
-    # --- Qwen2-Audio captioning (sidecar subprocess) ---
-    # Runs Qwen2-Audio-7B-Instruct in an isolated venv (modern transformers +
+    # --- Qwen2-Audio captioning (sidecar subprocess, same .venv) ---
+    # Runs Qwen2-Audio-7B-Instruct in a child process (modern transformers +
     # bitsandbytes) and injects a natural-language visual caption into the base
     # prompt. Enable with --no-qwen to disable when audio is active.
     qwen: bool = True
     qwen_model_id: str = "Qwen/Qwen2-Audio-7B-Instruct"
-    qwen_python: Optional[str] = None  # defaults to <project>/.venv-qwen/Scripts/python.exe
+    qwen_python: Optional[str] = None  # defaults to main .venv / packaged main-env python
     # GPU load is dominated by (a) the audio encoder prefill, which scales with
     # the window length, and (b) the LM decode, which costs one full 7B forward
     # per generated token. Keeping the window short and the output capped makes
@@ -325,17 +325,27 @@ class Config:
         return self.rtx_video_sdk_path or os.environ.get("NV_RTX_VIDEO_SDK")
 
     def resolved_qwen_python(self) -> str:
-        """Path to the sidecar venv Python interpreter."""
+        """Path to the Python interpreter used for the Qwen sidecar subprocess."""
         if self.qwen_python:
             return self.qwen_python
-        # Packaged installs put the sidecar at runtime\qwen-env (standalone
-        # CPython, python.exe at its root) and point here via env.
         if env := os.environ.get("SONAFLOW_QWEN_PYTHON"):
             return env
         root = _repo_root()
+        packaged_py = root.parent / "runtime" / "main-env" / "python.exe"
+        if packaged_py.is_file():
+            return str(packaged_py)
         if sys.platform == "win32":
-            return str(root / ".venv-qwen" / "Scripts" / "python.exe")
-        return str(root / ".venv-qwen" / "bin" / "python")
+            main_py = root / ".venv" / "Scripts" / "python.exe"
+        else:
+            main_py = root / ".venv" / "bin" / "python"
+        try:
+            Path(sys.executable).resolve().relative_to((root / ".venv").resolve())
+            return sys.executable
+        except ValueError:
+            pass
+        if main_py.is_file():
+            return str(main_py)
+        return str(main_py)
 
     def __post_init__(self) -> None:
         bootstrap_import_paths()
