@@ -207,8 +207,7 @@ class UIController:
             return
 
         if key.startswith("prompt_blacklist"):
-            if ctx.clap_orchestrator is not None:
-                ctx.clap_orchestrator.sync_blacklist_from_config(cfg)
+            self._sync_prompt_blacklist(cfg)
             self._republish_prompts()
             return
 
@@ -286,6 +285,14 @@ class UIController:
         self._pending_prompt_republish = True
         self._prompt_republish_at = time.monotonic() + self._PROMPT_REPUBLISH_SEC
 
+    def _sync_prompt_blacklist(self, cfg: Config) -> None:
+        """Push blacklist settings into prompt orchestrators."""
+        ctx = self._ctx
+        if ctx.clap_orchestrator is not None:
+            ctx.clap_orchestrator.sync_blacklist_from_config(cfg)
+        if ctx.qwen_orchestrator is not None:
+            ctx.qwen_orchestrator.sync_blacklist_from_config(cfg)
+
     def _republish_prompts(self) -> None:
         """Re-compose the active generation prompt from the current base text."""
         ctx = self._ctx
@@ -319,12 +326,24 @@ class UIController:
         """Copy current text/enum widget contents into cfg (even mid-edit)."""
         if self._bridge is None or not self._bridge._available:
             return
+        blacklist_keys = {
+            "prompt_blacklist",
+            "prompt_blacklist_mode",
+            "prompt_blacklist_whole_words",
+        }
+        touched_blacklist = False
         for i, spec in enumerate(self._specs):
             if spec.kind not in (ParamKind.TEXT, ParamKind.ENUM):
                 continue
             text = self._bridge.get_text(i)
             val = ui_value_to_config(spec, text)
+            old = getattr(self._ctx.cfg, spec.key)
             setattr(self._ctx.cfg, spec.key, val)
+            if spec.key in blacklist_keys and old != val:
+                touched_blacklist = True
+        if touched_blacklist:
+            self._sync_prompt_blacklist(self._ctx.cfg)
+            self._republish_prompts()
 
     def _handle_actions(self) -> None:
         if self._bridge is None or not self._bridge._available:
@@ -347,8 +366,10 @@ class UIController:
             if path:
                 data = import_settings(__import__("pathlib").Path(path))
                 _apply_dict(self._ctx.cfg, data)
+                self._sync_prompt_blacklist(self._ctx.cfg)
                 self.push_all_values()
                 self._flag_restart_for_all_restart_fields()
+                self._republish_prompts()
                 logger.info("Imported settings from %s", path)
         if actions & UiAction.RESTART:
             self._ctx.restart.trigger()
@@ -360,5 +381,7 @@ class UIController:
 
     def import_dict(self, data: dict) -> None:
         _apply_dict(self._ctx.cfg, data)
+        self._sync_prompt_blacklist(self._ctx.cfg)
         self.push_all_values()
         self._flag_restart_for_all_restart_fields()
+        self._republish_prompts()

@@ -135,7 +135,9 @@ def filter_composed_addition(
         addition, blacklist, mode, whole_words=whole_words
     )
     if filtered is None:
-        return None
+        # Addition rejected or fully stripped — fall back to the exempt base
+        # prompt instead of leaving a stale composed prompt in place.
+        return base if base else None
     if not base:
         return filtered
     return f"{base}, {filtered}"

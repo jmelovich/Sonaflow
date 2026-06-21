@@ -23,6 +23,7 @@ from music_visualizer.analysis.prompt_builder import PromptBuilder, TagDetail
 from music_visualizer.config import Config
 from music_visualizer.utils.logging import get_logger
 from music_visualizer.utils.shared_state import AudioRing, SharedPrompt
+from music_visualizer.utils.text import filter_prompt_addition
 
 logger = get_logger(__name__)
 
@@ -93,10 +94,11 @@ class PromptOrchestrator:
     def sync_blacklist_from_config(self, cfg: Config) -> None:
         """Apply live blacklist edits to the CLAP prompt builder."""
         self.config = cfg
-        b = self._builder
-        b.prompt_blacklist = cfg.prompt_blacklist
-        b.prompt_blacklist_mode = cfg.prompt_blacklist_mode
-        b.prompt_blacklist_whole_words = cfg.prompt_blacklist_whole_words
+        self._builder.apply_blacklist(
+            cfg.prompt_blacklist,
+            cfg.prompt_blacklist_mode,
+            whole_words=cfg.prompt_blacklist_whole_words,
+        )
 
     def sync_from_config(self, cfg: Config) -> None:
         """Apply live UI edits to CLAP builder/analyzer tuning."""
@@ -118,12 +120,26 @@ class PromptOrchestrator:
         a.calib_warmup = cfg.clap_calib_warmup
         a.calib_spike_guard = cfg.clap_calib_spike_guard
 
+    def _filtered_qwen_caption(self) -> str:
+        """Return the latest Qwen caption after the current blacklist rules."""
+        if self._qwen is None:
+            return ""
+        caption = self._qwen.last_caption().strip()
+        if not caption:
+            return ""
+        filtered = filter_prompt_addition(
+            caption,
+            self.config.prompt_blacklist,
+            self.config.prompt_blacklist_mode,
+            whole_words=self.config.prompt_blacklist_whole_words,
+        )
+        return (filtered or "").strip()
+
     def _effective_base_prompt(self) -> str:
         manual = self._base.current().strip()
-        if self._qwen is not None:
-            caption = self._qwen.last_caption().strip()
-            if caption:
-                return f"{manual}, {caption}" if manual else caption
+        caption = self._filtered_qwen_caption()
+        if caption:
+            return f"{manual}, {caption}" if manual else caption
         return manual
 
     def _publish_composed(self, composed: str) -> None:

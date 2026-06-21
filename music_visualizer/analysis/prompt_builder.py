@@ -67,6 +67,26 @@ class PromptBuilder:
         # Force the next update()/republish to see the new foundation text.
         self._last_composed = None
 
+    def apply_blacklist(
+        self,
+        blacklist: str,
+        mode: PromptBlacklistMode,
+        *,
+        whole_words: bool = True,
+    ) -> bool:
+        """Update blacklist settings; return True when compose output may change."""
+        changed = (
+            self.prompt_blacklist != blacklist
+            or self.prompt_blacklist_mode != mode
+            or self.prompt_blacklist_whole_words != whole_words
+        )
+        self.prompt_blacklist = blacklist
+        self.prompt_blacklist_mode = mode
+        self.prompt_blacklist_whole_words = whole_words
+        if changed:
+            self._last_composed = None
+        return changed
+
     def compose_now(self) -> str:
         """Build the current composed prompt and mark it as published."""
         composed = self._compose()

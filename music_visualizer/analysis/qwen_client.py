@@ -301,6 +301,25 @@ class QwenOrchestrator:
         """Re-compose active prompt from the current base + last caption."""
         self._try_publish_caption(self.last_caption(), None, hold_active=False)
 
+    def sync_blacklist_from_config(self, cfg: Config) -> None:
+        """Re-filter cached captions after live blacklist edits."""
+        self.config = cfg
+        with self._lock:
+            pending = self._pending_caption
+            last = self._last_caption
+        if pending:
+            filtered = self._filter_caption(pending)
+            with self._lock:
+                if filtered is None:
+                    self._pending_caption = ""
+                    self._pending_audio = None
+                else:
+                    self._pending_caption = filtered
+        if last:
+            filtered = self._filter_caption(last)
+            with self._lock:
+                self._last_caption = filtered or ""
+
     def _compose(self, caption: str) -> str:
         caption = caption.strip()
         anchor = self._base.current().strip()
