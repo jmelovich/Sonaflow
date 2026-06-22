@@ -15,8 +15,10 @@ _PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 # back to the repo root in a dev checkout.
 DEFAULTS_PATH = _settings_path()
 
-# Fields not persisted (runtime-only or derived).
-_SKIP_KEYS = frozenset({"benchmark"})
+# Fields not persisted in the main settings file. ``react_routes`` lives in the
+# external routes file (react_routes_path); persisting it here too would create
+# a second, conflicting source of truth.
+_SKIP_KEYS = frozenset({"benchmark", "react_routes"})
 
 
 def _config_to_dict(cfg: Config) -> dict[str, Any]:

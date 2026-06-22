@@ -26,6 +26,12 @@ class AudioFeatures:
     mid: float = 0.0             # ~250-4000 Hz energy, normalized [0, 1]
     treble: float = 0.0          # ~4000+ Hz energy, normalized [0, 1]
     spectral_centroid: float = 0.0  # brightness proxy, normalized [0, 1]
+    spectral_rolloff: float = 0.0   # roll-off bin / Nyquist, normalized [0, 1]
+    spectral_flux: float = 0.0      # spectral flux, normalized [0, 1]
+    spectral_spread: float = 0.0    # spectral spread, normalized [0, 1]
+    zcr: float = 0.0                # zero-crossing rate, normalized [0, 1]
+    pitch: float = 0.0              # pitch mapped ~80-2000 Hz -> [0, 1]
+    pitch_confidence: float = 0.0   # aubio pitch confidence [0, 1]
 
     @classmethod
     def silent(cls) -> "AudioFeatures":

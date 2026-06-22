@@ -32,6 +32,8 @@ logger = get_logger(__name__)
 _BASS_HZ = (20.0, 250.0)
 _MID_HZ = (250.0, 4000.0)
 _TREBLE_LO_HZ = 4000.0
+_PITCH_LO_HZ = 80.0
+_PITCH_HI_HZ = 2000.0
 
 
 class AubioAnalyzer:
@@ -60,6 +62,11 @@ class AubioAnalyzer:
         self._tempo.set_silence(float(tempo_silence_db))
         self._onset = aubio.onset("default", self.fft_size, self.hop_size, self.sample_rate)
         self._pvoc = aubio.pvoc(self.fft_size, self.hop_size)
+        spec_buf = self.fft_size
+        self._rolloff = aubio.specdesc("rolloff", spec_buf)
+        self._specflux = aubio.specdesc("specflux", spec_buf)
+        self._spread = aubio.specdesc("spread", spec_buf)
+        self._pitch = aubio.pitch("yinfft", self.fft_size, self.hop_size, self.sample_rate)
 
         # Precompute the bin -> band masks (bin i center freq = i * sr / fft_size).
         n_bins = self.fft_size // 2 + 1
@@ -75,8 +82,12 @@ class AubioAnalyzer:
         self._bass_norm = RollingNormalizer(decay=norm_decay)
         self._mid_norm = RollingNormalizer(decay=norm_decay)
         self._treble_norm = RollingNormalizer(decay=norm_decay)
+        self._flux_norm = RollingNormalizer(decay=norm_decay)
+        self._spread_norm = RollingNormalizer(decay=norm_decay)
+        self._zcr_norm = RollingNormalizer(decay=norm_decay)
 
         self._bpm_smoothing = float(bpm_smoothing)
+        self._n_bins = self.fft_size // 2 + 1
         self._bpm = 0.0
         self._frames = 0
         self._grid: Optional[BeatGridLock] = None
@@ -150,6 +161,26 @@ class AubioAnalyzer:
         nyquist = self.sample_rate / 2.0
         centroid = max(0.0, min(1.0, centroid_hz / nyquist))
 
+        rolloff_bin = float(self._rolloff(fftgrain)[0])
+        rolloff = max(0.0, min(1.0, rolloff_bin / max(1.0, self._n_bins - 1)))
+        flux_raw = float(self._specflux(fftgrain)[0])
+        spread_raw = float(self._spread(fftgrain)[0])
+        zcr_raw = float(aubio.zero_crossing_rate(samples))
+
+        pitch_hz = float(self._pitch(samples)[0])
+        pitch_conf = float(self._pitch.get_confidence())
+        if pitch_hz > 0:
+            pitch = max(
+                0.0,
+                min(
+                    1.0,
+                    (pitch_hz - _PITCH_LO_HZ) / max(1.0, _PITCH_HI_HZ - _PITCH_LO_HZ),
+                ),
+            )
+        else:
+            pitch = 0.0
+        pitch_conf = max(0.0, min(1.0, pitch_conf))
+
         rms_raw = float(np.sqrt(np.mean(samples * samples)))
 
         bass = self._bass_norm(bass_raw)
@@ -174,6 +205,12 @@ class AubioAnalyzer:
             mid=self._mid_norm(mid_raw),
             treble=self._treble_norm(treble_raw),
             spectral_centroid=centroid,
+            spectral_rolloff=rolloff,
+            spectral_flux=self._flux_norm(flux_raw),
+            spectral_spread=self._spread_norm(spread_raw),
+            zcr=self._zcr_norm(zcr_raw),
+            pitch=pitch,
+            pitch_confidence=pitch_conf,
         )
 
     def _fit_hop(self, samples: np.ndarray) -> np.ndarray:

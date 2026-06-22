@@ -128,5 +128,9 @@
   "vsr_quality": 4,
   "warmup": 10,
   "width": 1216,
-  "window_title": "Sonaflow"
+  "window_title": "Sonaflow",
+  "react_bpm_map_min": 60.0,
+  "react_bpm_map_max": 180.0,
+  "react_pan_max": 0.05,
+  "react_routes_path": null
 }

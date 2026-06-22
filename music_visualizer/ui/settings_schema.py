@@ -10,6 +10,14 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Any, Callable, Optional, Sequence, Tuple
 
+from music_visualizer.audio.routing import (
+    Route,
+    normalize_routes,
+    parse_route_key,
+    route_field_value,
+    set_route_field,
+)
+
 
 class ParamKind(str, Enum):
     BOOL = "bool"
@@ -68,8 +76,37 @@ def _s(
     )
 
 
+def build_route_specs(cfg: Any) -> Tuple[ParamSpec, ...]:
+    """Build labeled gain + enable controls for each route in the routes file.
+
+    Route *structure* (source/amp/target/curve/mode) lives in the external
+    routes file; the UI only exposes the runtime-tunable ``gain`` (a labeled
+    slider with per-route range) and ``enable`` toggle.
+    """
+    routes = normalize_routes(getattr(cfg, "react_routes", None))
+    specs: list[ParamSpec] = []
+    for i, raw in enumerate(routes):
+        route = Route.from_dict(raw)
+        label = route.display_label(i)
+        group = route.group or "Audio Routes"
+        binding = f"{route.source} -> {route.target}"
+        if route.mode != "add":
+            binding += f" ({route.mode})"
+        tip = route.tooltip or binding
+        specs.append(_s(
+            f"route{i}_enable", f"{label} (on)", group, ParamKind.BOOL,
+            tooltip=f"Enable: {binding}.",
+        ))
+        specs.append(_s(
+            f"route{i}_gain", label, group, ParamKind.FLOAT,
+            min_val=route.gain_min, max_val=route.gain_max, step=route.gain_step,
+            tooltip=tip,
+        ))
+    return tuple(specs)
+
+
 # Ordered list of every tunable Config field exposed in the UI.
-PARAM_SPECS: Tuple[ParamSpec, ...] = (
+_PARAM_SPECS_HEAD: Tuple[ParamSpec, ...] = (
     # --- Prompt ---
     _s("prompt", "Base prompt", "Prompt", ParamKind.TEXT,
        tooltip="Manual foundation prompt. CLAP/Qwen append on top. Press Enter or "
@@ -167,68 +204,58 @@ PARAM_SPECS: Tuple[ParamSpec, ...] = (
        tooltip="FFT window for aubio (must be >= hop size)."),
     _s("reactive", "Audio-reactive motion", "Audio", ParamKind.BOOL,
        tooltip="Map audio features to zoom/pan/rotate/noise. Off keeps manual motion only."),
-    # --- Reactive mapping ---
-    _s("react_zoom_gain", "Zoom gain (bass)", "Reactive", ParamKind.FLOAT,
-       min_val=0.0, max_val=0.05, step=0.001,
-       tooltip="How much bass energy adds per-frame zoom beyond the baseline."),
-    _s("react_beat_zoom", "Beat zoom punch", "Reactive", ParamKind.FLOAT,
-       min_val=0.0, max_val=0.3, step=0.005,
-       tooltip="Extra zoom impulse on each detected beat."),
-    _s("react_beat_bass_scale", "Beat punch bass scale", "Reactive", ParamKind.FLOAT,
-       min_val=0.0, max_val=1.0, step=0.05,
-       tooltip="0 = full punch every beat; 1 = punch proportional to bass at the hit."),
+    # --- Reactive globals ---
     _s("react_zoom_max", "Max reactive zoom", "Reactive", ParamKind.FLOAT,
        min_val=1.0, max_val=1.5, step=0.005,
        tooltip="Hard cap on per-frame zoom from reactive mapping."),
-    _s("react_noise_gain", "Onset noise gain", "Reactive", ParamKind.FLOAT,
-       min_val=0.0, max_val=2.0, step=0.05,
-       tooltip="How much onset/transient strength boosts noise drift."),
-    _s("react_bpm_noise_pivot", "BPM noise pivot", "Reactive", ParamKind.FLOAT,
-       min_val=40.0, max_val=160.0, step=1.0,
-       tooltip="BPM at which the BPM noise multiplier is 1.0."),
-    _s("react_bpm_noise_mult_min", "BPM noise min mult", "Reactive", ParamKind.FLOAT,
-       min_val=0.1, max_val=2.0, step=0.05,
-       tooltip="Noise scale at very slow tempos."),
-    _s("react_bpm_noise_mult_max", "BPM noise max mult", "Reactive", ParamKind.FLOAT,
-       min_val=0.1, max_val=2.0, step=0.05,
-       tooltip="Noise scale at high BPM."),
-    _s("react_bpm_noise_high_bpm", "BPM noise high BPM", "Reactive", ParamKind.FLOAT,
-       min_val=100.0, max_val=300.0, step=1.0,
-       tooltip="BPM where the noise multiplier reaches its maximum."),
-    _s("react_rotate_gain", "Rotate gain (treble)", "Reactive", ParamKind.FLOAT,
-       min_val=0.0, max_val=0.2, step=0.005,
-       tooltip="Treble energy -> degrees/frame rotation."),
     _s("react_rotate_max", "Max rotate", "Reactive", ParamKind.FLOAT,
        min_val=0.0, max_val=0.5, step=0.005,
        tooltip="Hard cap on |rotate| degrees/frame."),
-    _s("react_beat_rotate", "Beat rotate punch", "Reactive", ParamKind.FLOAT,
-       min_val=0.0, max_val=0.2, step=0.005,
-       tooltip="Extra rotation on loud beats in the current spin direction."),
+    _s("react_pan_max", "Max pan / frame", "Reactive", ParamKind.FLOAT,
+       min_val=0.0, max_val=0.2, step=0.001,
+       tooltip="Hard cap on |pan_x| and |pan_y| per frame."),
+    _s("react_bpm_map_min", "BPM map min", "Reactive", ParamKind.FLOAT,
+       min_val=40.0, max_val=160.0, step=1.0,
+       tooltip="BPM mapped to 0 for the bpm_mapped source."),
+    _s("react_bpm_map_max", "BPM map max", "Reactive", ParamKind.FLOAT,
+       min_val=80.0, max_val=300.0, step=1.0,
+       tooltip="BPM mapped to 1 for the bpm_mapped source."),
+    _s("react_bpm_noise_pivot", "BPM noise pivot", "Reactive", ParamKind.FLOAT,
+       min_val=40.0, max_val=160.0, step=1.0,
+       tooltip="BPM at which the bpm_noise_mult source equals 1.0."),
+    _s("react_bpm_noise_mult_min", "BPM noise min mult", "Reactive", ParamKind.FLOAT,
+       min_val=0.1, max_val=2.0, step=0.05,
+       tooltip="bpm_noise_mult source at very slow tempos."),
+    _s("react_bpm_noise_mult_max", "BPM noise max mult", "Reactive", ParamKind.FLOAT,
+       min_val=0.1, max_val=2.0, step=0.05,
+       tooltip="bpm_noise_mult source at high BPM."),
+    _s("react_bpm_noise_high_bpm", "BPM noise high BPM", "Reactive", ParamKind.FLOAT,
+       min_val=100.0, max_val=300.0, step=1.0,
+       tooltip="BPM where bpm_noise_mult reaches its maximum."),
     _s("react_beat_loud_rms", "Loud beat RMS min", "Reactive", ParamKind.FLOAT,
        min_val=0.0, max_val=1.0, step=0.01,
-       tooltip="Minimum RMS for a beat to count as 'loud' for rotate punch."),
+       tooltip="Minimum RMS for beat_loud rotate punch."),
     _s("react_beat_loud_mid", "Loud beat mid min", "Reactive", ParamKind.FLOAT,
        min_val=0.0, max_val=1.0, step=0.01,
-       tooltip="Minimum mid energy for loud-beat rotate punch."),
+       tooltip="Minimum mid energy for beat_loud rotate punch."),
     _s("react_beat_loud_treb", "Loud beat treble min", "Reactive", ParamKind.FLOAT,
        min_val=0.0, max_val=1.0, step=0.01,
-       tooltip="Minimum treble energy for loud-beat rotate punch."),
-    _s("react_pan_gain", "Pan orbit gain", "Reactive", ParamKind.FLOAT,
-       min_val=0.0, max_val=0.1, step=0.001,
-       tooltip="Mid energy -> circular pan orbit radius."),
+       tooltip="Minimum treble energy for beat_loud rotate punch."),
     _s("react_smoothing_tau", "Smoothing tau (s)", "Reactive", ParamKind.FLOAT,
        min_val=0.01, max_val=2.0, step=0.01,
-       tooltip="EMA time constant for band/onset smoothing."),
+       tooltip="EMA time constant for continuous source smoothing."),
     _s("react_beat_decay_tau", "Beat decay tau (s)", "Reactive", ParamKind.FLOAT,
        min_val=0.01, max_val=2.0, step=0.01,
-       tooltip="How fast beat impulses decay."),
+       tooltip="How fast beat/beat_loud impulses decay."),
     _s("react_pan_orbit_rate", "Pan orbit rate", "Reactive", ParamKind.FLOAT,
        min_val=0.0, max_val=5.0, step=0.05,
-       tooltip="Angular speed of the mid-driven pan orbit (rad/s)."),
+       tooltip="Angular speed of orbit_sin/orbit_cos sources (rad/s)."),
     _s("react_norm_decay", "Norm decay", "Reactive", ParamKind.FLOAT,
        min_val=0.9, max_val=1.0, step=0.001,
        tooltip="Rolling-peak decay for feature normalization."),
-    # --- Beat ---
+)
+
+_PARAM_SPECS_TAIL: Tuple[ParamSpec, ...] = (
     _s("beat_tempo_threshold", "Tempo threshold", "Beat", ParamKind.FLOAT,
        min_val=0.05, max_val=1.0, step=0.01,
        tooltip="aubio tempo peak threshold. Lower = more beat detections."),
@@ -441,15 +468,33 @@ PARAM_SPECS: Tuple[ParamSpec, ...] = (
     _s("engine_dir", "TensorRT engine dir", "Integration", ParamKind.TEXT,
        requires_restart=True,
        tooltip="Directory for TensorRT engines (blank = auto)."),
+    _s("react_routes_path", "Audio routes file", "Integration", ParamKind.TEXT,
+       requires_restart=True,
+       tooltip="Path to the audio routing matrix JSON (blank = <data dir>/audio_routes.json)."),
 )
 
+# Static (non-route) specs. Route specs are built per-config from the routes
+# file via build_param_specs(cfg). PARAM_SPECS is the route-less default kept
+# for back-compat (e.g. lookups that don't involve route keys).
+STATIC_PARAM_SPECS: Tuple[ParamSpec, ...] = _PARAM_SPECS_HEAD + _PARAM_SPECS_TAIL
+PARAM_SPECS: Tuple[ParamSpec, ...] = STATIC_PARAM_SPECS
 
-def spec_by_key() -> dict[str, ParamSpec]:
-    return {p.key: p for p in PARAM_SPECS}
+
+def build_param_specs(cfg: Any) -> Tuple[ParamSpec, ...]:
+    """Full spec list for a config: static head + per-route controls + tail."""
+    return _PARAM_SPECS_HEAD + build_route_specs(cfg) + _PARAM_SPECS_TAIL
+
+
+def spec_by_key(specs: Optional[Sequence[ParamSpec]] = None) -> dict[str, ParamSpec]:
+    return {p.key: p for p in (specs if specs is not None else PARAM_SPECS)}
 
 
 def config_value_for_ui(cfg: Any, spec: ParamSpec) -> Any:
     """Read a Config field and normalize for the native widget."""
+    parsed = parse_route_key(spec.key)
+    if parsed is not None:
+        idx, field_name = parsed
+        return route_field_value(cfg, idx, field_name)
     val = getattr(cfg, spec.key)
     if spec.key == "t_index_list":
         if val is None:
@@ -460,13 +505,23 @@ def config_value_for_ui(cfg: Any, spec: ParamSpec) -> Any:
     if spec.key in ("output_width", "output_height") and val is None:
         return 0
     if spec.key in ("engine_dir", "rtx_video_sdk_path", "clap_vocab_path",
-                    "qwen_python", "audio_file") and val is None:
+                    "qwen_python", "audio_file", "react_routes_path") and val is None:
         return ""
     return val
 
 
 def ui_value_to_config(spec: ParamSpec, raw: Any) -> Any:
     """Convert a widget value back to the Python Config type."""
+    parsed = parse_route_key(spec.key)
+    if parsed is not None:
+        _, field_name = parsed
+        if field_name == "enable":
+            return bool(raw)
+        if field_name in ("source", "amp", "target", "mode"):
+            return str(raw)
+        if field_name in ("gain", "curve"):
+            return float(raw)
+        return raw
     if spec.kind == ParamKind.BOOL:
         return bool(raw)
     if spec.kind == ParamKind.INT:
@@ -484,6 +539,6 @@ def ui_value_to_config(spec: ParamSpec, raw: Any) -> Any:
             return None
         return [int(x.strip()) for x in s.split(",") if x.strip()]
     if spec.key in ("engine_dir", "rtx_video_sdk_path", "clap_vocab_path",
-                    "qwen_python", "audio_file") and not str(raw or "").strip():
+                    "qwen_python", "audio_file", "react_routes_path") and not str(raw or "").strip():
         return None
     return str(raw)

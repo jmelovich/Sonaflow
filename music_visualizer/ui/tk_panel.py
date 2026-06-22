@@ -9,8 +9,8 @@ from typing import Any, Dict, Optional
 from music_visualizer.config import Config
 from music_visualizer.ui.controller import UIController
 from music_visualizer.ui.persistence import export_settings, import_settings, save_defaults
+from music_visualizer.audio.routing import parse_route_key, set_route_field
 from music_visualizer.ui.settings_schema import (
-    PARAM_SPECS,
     ParamKind,
     ParamSpec,
     config_value_for_ui,
@@ -90,7 +90,7 @@ class TkSettingsPanel:
 
         current_group = None
         group_frame = inner
-        for spec in PARAM_SPECS:
+        for spec in self._controller.specs:
             if spec.group != current_group:
                 current_group = spec.group
                 group_frame = ttk.LabelFrame(inner, text=spec.group)
@@ -178,12 +178,18 @@ class TkSettingsPanel:
         self._controller.apply_key(spec.key, raw)
 
     def _sync_vars_to_config(self) -> None:
-        for spec in PARAM_SPECS:
+        cfg = self._controller._ctx.cfg
+        for spec in self._controller.specs:
             var = self._vars.get(spec.key)
             if var is None:
                 continue
             val = ui_value_to_config(spec, var.get())
-            setattr(self._controller._ctx.cfg, spec.key, val)
+            parsed = parse_route_key(spec.key)
+            if parsed is not None:
+                idx, field_name = parsed
+                set_route_field(cfg, idx, field_name, val)
+            else:
+                setattr(cfg, spec.key, val)
 
     def _save_defaults(self) -> None:
         self._sync_vars_to_config()

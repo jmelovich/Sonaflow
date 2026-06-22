@@ -15,13 +15,20 @@ from music_visualizer.ui.persistence import (
     _apply_dict,
 )
 from music_visualizer.ui.settings_schema import (
-    PARAM_SPECS,
+    STATIC_PARAM_SPECS,
     ApplyStrategy,
     ParamKind,
     ParamSpec,
+    build_param_specs,
     config_value_for_ui,
     spec_by_key,
     ui_value_to_config,
+)
+from music_visualizer.audio.routing import (
+    parse_route_key,
+    routes_file_path,
+    save_routes_file,
+    set_route_field,
 )
 from music_visualizer.ui.ui_bridge import NativeUIBridge, UiAction
 from music_visualizer.utils.logging import get_logger, setup_logging
@@ -99,8 +106,9 @@ class UIController:
     def __init__(self, ctx: RuntimeContext, bridge: Optional[NativeUIBridge] = None) -> None:
         self._bridge = bridge
         self._ctx = ctx
-        self._specs = list(PARAM_SPECS)
+        self._specs = list(build_param_specs(ctx.cfg))
         self._key_to_idx = {s.key: i for i, s in enumerate(self._specs)}
+        self._spec_by_key = {s.key: s for s in self._specs}
         self._pending_prompt_republish = False
         self._prompt_republish_at = 0.0
         if bridge is not None and bridge._available:
@@ -135,7 +143,7 @@ class UIController:
 
     def reset_key(self, key: str) -> None:
         """Reset one setting to its Config default."""
-        spec = spec_by_key().get(key)
+        spec = self._spec_by_key.get(key)
         if spec is None:
             return
         defaults = Config()
@@ -148,7 +156,7 @@ class UIController:
 
     def apply_key(self, key: str, val: Any) -> None:
         """Apply one setting change (used by Tk fallback and tests)."""
-        spec = spec_by_key().get(key)
+        spec = self._spec_by_key.get(key)
         if spec is None:
             return
         self._set_config_value(spec, ui_value_to_config(spec, val))
@@ -187,6 +195,19 @@ class UIController:
             self._set_config_value(spec, val)
 
     def _set_config_value(self, spec: ParamSpec, val: Any) -> None:
+        parsed = parse_route_key(spec.key)
+        if parsed is not None:
+            idx, field_name = parsed
+            new_val = ui_value_to_config(spec, val)
+            old_val = config_value_for_ui(self._ctx.cfg, spec)
+            if old_val == new_val:
+                return
+            set_route_field(self._ctx.cfg, idx, field_name, new_val)
+            logger.info("Setting %s -> %s", spec.key, new_val)
+            if self._ctx.mapper is not None:
+                self._ctx.mapper.sync_from_config()
+            return
+
         old = getattr(self._ctx.cfg, spec.key)
         if old == val:
             return
@@ -243,6 +264,10 @@ class UIController:
             return
 
         if key.startswith("react_") and ctx.mapper is not None:
+            ctx.mapper.sync_from_config()
+            return
+
+        if key.startswith("route") and ctx.mapper is not None:
             ctx.mapper.sync_from_config()
             return
 
@@ -355,6 +380,13 @@ class UIController:
             self._sync_text_from_ui()
             path = save_defaults(self._ctx.cfg)
             logger.info("Saved defaults to %s", path)
+            try:
+                routes_path = save_routes_file(
+                    routes_file_path(self._ctx.cfg), self._ctx.cfg.react_routes or []
+                )
+                logger.info("Saved audio routes to %s", routes_path)
+            except OSError as exc:
+                logger.warning("Could not save audio routes file: %s", exc)
         if actions & UiAction.EXPORT:
             self._sync_text_from_ui()
             path = self._bridge.open_file_dialog(save=True)

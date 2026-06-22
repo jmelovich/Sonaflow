@@ -130,6 +130,15 @@ class Config:
     react_beat_decay_tau: float = 0.18  # beat impulse decay time constant (s)
     react_pan_orbit_rate: float = 0.6   # pan drift angular speed (rad/s)
     react_norm_decay: float = 0.999     # rolling-peak decay for feature normalize
+    react_bpm_map_min: float = 60.0     # BPM mapped to 0 for bpm_mapped source
+    react_bpm_map_max: float = 180.0    # BPM mapped to 1 for bpm_mapped source
+    react_pan_max: float = 0.05         # hard cap on |pan_x|/|pan_y| per frame
+    # Audio routing matrix. Loaded from the external routes file (react_routes_path)
+    # so structure is edited in a file and only labeled gain/enable controls show
+    # in the UI. None at construction -> resolved in __post_init__ from the file
+    # (or synthesized from legacy react_* gains and written out on first run).
+    react_routes: Optional[List[dict]] = None
+    react_routes_path: Optional[str] = None  # default: <data dir>/audio_routes.json
 
     # --- Beat detection (aubio tempo; optional grid fill-in) ---
     # aubio defaults: threshold 0.3, silence -90 dB.
@@ -385,3 +394,34 @@ class Config:
             )
         if self.qwen_blend_sec is None:
             self.qwen_blend_sec = float(self.qwen_min_interval_sec)
+        self._resolve_routes()
+
+    def _resolve_routes(self) -> None:
+        """Load the routing matrix from the external file (authoritative).
+
+        Precedence: existing routes file -> any ``react_routes`` passed in
+        (legacy migration) -> defaults synthesized from ``react_*`` scalars.
+        When the file is missing it is written so the user has something to
+        edit; tuned gains are saved back via the UI's Save action.
+        """
+        from music_visualizer.audio.routing import (
+            build_default_routes,
+            load_routes_file,
+            normalize_routes,
+            routes_file_path,
+            save_routes_file,
+        )
+
+        path = routes_file_path(self)
+        loaded = load_routes_file(path)
+        if loaded is not None:
+            self.react_routes = loaded
+            return
+        if self.react_routes:
+            self.react_routes = normalize_routes(self.react_routes)
+        else:
+            self.react_routes = build_default_routes(self)
+        try:
+            save_routes_file(path, self.react_routes)
+        except OSError:
+            pass
