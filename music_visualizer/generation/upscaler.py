@@ -92,9 +92,8 @@ class RTXUpscaler:
         self.disp_h = self.out_h
         self._downscale = False
         if display_max_size and display_max_size > 0:
-            longest = max(self.out_w, self.out_h)
-            if longest > display_max_size:
-                s = display_max_size / longest
+            if self.out_h > display_max_size:
+                s = display_max_size / self.out_h
                 self.disp_w = max(1, round(self.out_w * s))
                 self.disp_h = max(1, round(self.out_h * s))
                 self._downscale = True

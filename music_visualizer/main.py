@@ -365,8 +365,8 @@ def build_config(argv: list[str] | None = None) -> Config:
     disp.add_argument("--display-scale", type=float, default=None)
     disp.add_argument(
         "--display-max-size", dest="display_max_size", type=int, default=None,
-        help="Cap the displayed frame's longest side in px (VSR still runs at "
-             "full res; the result is downscaled on-GPU before display). "
+        help="Cap the displayed frame height in px (VSR still runs at full res; "
+             "the result is downscaled on-GPU before display). "
              "0 disables (ship full upscaled frames). Default 1600.",
     )
     disp.add_argument(

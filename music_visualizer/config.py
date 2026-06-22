@@ -287,12 +287,10 @@ class Config:
     fullscreen: bool = False
     show_overlay: bool = True
     display_scale: float = 1.0  # upscale factor applied at display time (cv2 resize)
-    # Cap the frame sent to the display path (longest side, pixels). VSR still
-    # runs at the full upscale resolution for quality, but the result is
-    # downscaled on-GPU to this size before the CPU transfer + OpenCV display.
-    # The window is only ~1600px anyway, so this avoids shipping a 4096^2 (~48MB)
-    # frame over PCIe every frame. Set 0 to disable (ship full upscaled frames,
-    # e.g. for full-res capture/recording).
+    # Cap the frame height sent to the display path (pixels). VSR still runs at
+    # the full upscale resolution for quality, but the result is downscaled
+    # on-GPU (preserving aspect) before the CPU transfer + OpenCV display.
+    # Set 0 to disable (ship full upscaled frames, e.g. for full-res capture).
     display_max_size: int = 1600
     # Present frames straight from the GPU via CUDA->OpenGL interop (skips the
     # device->host copy and cv2.imshow). Windows-only; falls back to the OpenCV

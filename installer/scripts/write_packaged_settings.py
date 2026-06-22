@@ -38,7 +38,7 @@ def main(argv: list[str] | None = None) -> int:
     data: dict = {}
     if path.is_file():
         try:
-            loaded = json.loads(path.read_text(encoding="utf-8"))
+            loaded = json.loads(path.read_text(encoding="utf-8-sig"))
             if isinstance(loaded, dict):
                 data = loaded
         except (OSError, json.JSONDecodeError):

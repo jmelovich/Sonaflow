@@ -45,7 +45,7 @@
   "clap_window_sec": 4.0,
   "content_centering": true,
   "delta": 0.5,
-  "display_max_size": 1600,
+  "display_max_size": 900,
   "display_scale": 1.0,
   "do_add_noise": false,
   "engine_dir": null,

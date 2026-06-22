@@ -8,7 +8,10 @@ from pathlib import Path
 from typing import Any, Optional
 
 from music_visualizer.config import Config
+from music_visualizer.utils.logging import get_logger
 from music_visualizer.utils.paths import settings_path as _settings_path
+
+logger = get_logger(__name__)
 
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 # Honors SONAFLOW_SETTINGS_PATH / SONAFLOW_DATA_DIR in packaged installs; falls
@@ -49,11 +52,27 @@ def load_defaults_dict(path: Optional[Path] = None) -> dict[str, Any]:
     if not path.is_file():
         return {}
     try:
-        with open(path, encoding="utf-8") as fh:
+        with open(path, encoding="utf-8-sig") as fh:
             data = json.load(fh)
-        return data if isinstance(data, dict) else {}
-    except (OSError, json.JSONDecodeError):
+    except OSError as exc:
+        logger.warning("Could not read settings from %s: %s", path, exc)
         return {}
+    except json.JSONDecodeError as exc:
+        logger.warning(
+            "Invalid JSON in settings file %s (line %d, column %d): %s",
+            path,
+            exc.lineno,
+            exc.colno,
+            exc.msg,
+        )
+        return {}
+    if not isinstance(data, dict):
+        logger.warning(
+            "Settings file %s must contain a JSON object; using built-in defaults.",
+            path,
+        )
+        return {}
+    return data
 
 
 def save_defaults(cfg: Config, path: Optional[Path] = None) -> Path:
@@ -75,7 +94,7 @@ def export_settings(cfg: Config, path: Path) -> None:
 
 
 def import_settings(path: Path) -> dict[str, Any]:
-    with open(path, encoding="utf-8") as fh:
+    with open(path, encoding="utf-8-sig") as fh:
         data = json.load(fh)
     if not isinstance(data, dict):
         raise ValueError("Settings file must contain a JSON object.")
