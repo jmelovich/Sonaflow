@@ -8,7 +8,7 @@ A realtime visualizer that drives Stable Diffusion image generation, reacts to a
 git clone https://github.com/jmelovich/Sonaflow.git
 cd Sonaflow
 .\setup.ps1
-.\run.ps1 "a vivid abstract nebula of swirling neon light"
+.\run.ps1
 ```
 
 Verify the install:
@@ -36,10 +36,10 @@ Setup auto-detects GPU VRAM and picks a profile. Override with `-Profile`:
 
 ```powershell
 # Realtime window (TensorRT — first run builds engines ~5–15 min, then cached)
-.\run.ps1 "neon city rain at night"
+.\run.ps1
 
 # Faster iteration (no engine build, slower inference)
-.\run.ps1 --acceleration none "abstract waves"
+.\run.ps1 --acceleration none
 
 # Headless throughput check
 .\run.ps1 --acceleration none --benchmark 30
