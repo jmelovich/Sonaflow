@@ -23,58 +23,32 @@ import sys
 import tempfile
 from pathlib import Path
 
+from music_visualizer.utils.cuda_toolkit import require_cuda_root
+from music_visualizer.utils.msvc_toolchain import require_msvc_env
+
 HERE = Path(__file__).resolve().parent
 SRC = HERE / "rtxvsr_bridge.cpp"
 DLL = HERE / "rtxvsr_bridge.dll"
 
 
 def _sdk_root() -> Path:
+    from music_visualizer.utils.rtx_video_sdk import (
+        is_valid_rtx_sdk_root,
+        rtx_video_sdk_install_help,
+    )
+
     root = os.environ.get("NV_RTX_VIDEO_SDK")
-    if not root:
-        raise RuntimeError(
-            "NV_RTX_VIDEO_SDK is not set. Point it at the RTX Video SDK root "
-            "(the directory containing bin/, include/, lib/, samples/)."
-        )
-    p = Path(root)
-    if not (p / "include" / "nvsdk_ngx.h").is_file():
-        raise RuntimeError(f"NV_RTX_VIDEO_SDK={p} does not look like the SDK root.")
-    return p
+    if not is_valid_rtx_sdk_root(root):
+        raise RuntimeError(rtx_video_sdk_install_help())
+    return Path(root)
 
 
 def _cuda_root() -> Path:
-    candidates = []
-    if os.environ.get("CUDA_PATH"):
-        candidates.append(Path(os.environ["CUDA_PATH"]))
-    base = Path(r"C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA")
-    if base.is_dir():
-        candidates.extend(sorted(base.glob("v*"), reverse=True))
-    for c in candidates:
-        if (c / "include" / "cuda.h").is_file() and (c / "lib" / "x64" / "cuda.lib").is_file():
-            return c
-    raise RuntimeError(
-        "Could not find a CUDA toolkit with cuda.h + lib/x64/cuda.lib. "
-        "Install the CUDA toolkit or set CUDA_PATH."
-    )
+    return require_cuda_root(header="cuda.h")
 
 
-def _vcvars() -> Path:
-    vswhere = Path(
-        os.environ.get("ProgramFiles(x86)", r"C:\Program Files (x86)")
-    ) / "Microsoft Visual Studio" / "Installer" / "vswhere.exe"
-    if not vswhere.is_file():
-        raise RuntimeError(f"vswhere.exe not found at {vswhere}. Install Visual Studio.")
-    out = subprocess.check_output(
-        [str(vswhere), "-latest", "-products", "*",
-         "-requires", "Microsoft.VisualStudio.Component.VC.Tools.x86.x64",
-         "-property", "installationPath"],
-        text=True,
-    ).strip()
-    if not out:
-        raise RuntimeError("vswhere found no VS install with the C++ toolset.")
-    vcvars = Path(out) / "VC" / "Auxiliary" / "Build" / "vcvars64.bat"
-    if not vcvars.is_file():
-        raise RuntimeError(f"vcvars64.bat not found at {vcvars}.")
-    return vcvars
+def _vcvars() -> str:
+    return require_msvc_env(upscale=True).call_line
 
 
 def build(force: bool = False) -> Path:
@@ -108,7 +82,7 @@ def build(force: bool = False) -> Path:
         bat = Path(tmp) / "build.bat"
         bat.write_text(
             "@echo off\r\n"
-            f'call "{vcvars}" >nul\r\n'
+            f"{vcvars}\r\n"
             f"cd /d \"{tmp}\"\r\n"
             f"{cl_cmd}\r\n"
             "exit /b %ERRORLEVEL%\r\n",

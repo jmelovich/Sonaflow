@@ -101,7 +101,7 @@ Install-Settings -ProjectRoot $ProjectRoot -Profile $resolvedProfile -Force:$For
 
 if (-not $SkipNativeBuild -and $resolvedProfile -ne "Minimal") {
     Write-SetupStep "Native bridges (optional)"
-    Install-NativeBridges -ProjectRoot $ProjectRoot -SkipNativeBuild:$SkipNativeBuild
+    Install-NativeBridges -ProjectRoot $ProjectRoot -Cuda $resolvedCuda -SkipNativeBuild:$SkipNativeBuild
 }
 
 Write-SetupStep "Done"

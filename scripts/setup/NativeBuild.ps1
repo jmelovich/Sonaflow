@@ -1,15 +1,33 @@
 # Optionally compile native bridge DLLs when MSVC + CUDA toolkit are available.
 
+function Get-CudaToolkitDownloadUrl {
+    param(
+        [ValidateSet("cu128", "cu121")]
+        [string]$Cuda = "cu128"
+    )
+    if ($Cuda -eq "cu121") {
+        return "https://developer.nvidia.com/cuda-12-1-0-download-archive"
+    }
+    return "https://developer.nvidia.com/cuda-12-8-0-download-archive"
+}
+
 function Test-NativeBuildTools {
     $result = @{ Msvc = $false; Cuda = $false; Ok = $false }
 
     $vswhere = Join-Path ${env:ProgramFiles(x86)} "Microsoft Visual Studio\Installer\vswhere.exe"
     if (Test-Path $vswhere) {
-        $vsPath = & $vswhere -latest -products * `
-            -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 `
-            -property installationPath 2>$null
-        if ($vsPath -and (Test-Path (Join-Path $vsPath "VC\Auxiliary\Build\vcvars64.bat"))) {
-            $result.Msvc = $true
+        $installs = @(& $vswhere -latest -products * -property installationPath 2>$null)
+        foreach ($vsPath in $installs) {
+            if (-not $vsPath) { continue }
+            $classic = Join-Path $vsPath "VC\Auxiliary\Build\vcvars64.bat"
+            $vsdevcmd = Join-Path $vsPath "Common7\Tools\VsDevCmd.bat"
+            $hasCl = Get-ChildItem (Join-Path $vsPath "VC\Tools\MSVC") -Recurse -Filter "cl.exe" -ErrorAction SilentlyContinue |
+                Where-Object { $_.FullName -match 'HostX64\\x64\\cl\.exe' } |
+                Select-Object -First 1
+            if ((Test-Path $classic) -or ((Test-Path $vsdevcmd) -and $hasCl)) {
+                $result.Msvc = $true
+                break
+            }
         }
     }
 
@@ -36,6 +54,8 @@ function Test-NativeBuildTools {
 function Install-NativeBridges {
     param(
         [string]$ProjectRoot,
+        [ValidateSet("cu128", "cu121")]
+        [string]$Cuda = "cu128",
         [switch]$SkipNativeBuild
     )
 
@@ -47,10 +67,16 @@ function Install-NativeBridges {
     $tools = Test-NativeBuildTools
     if (-not $tools.Ok) {
         if (-not $tools.Msvc) {
-            Write-SetupWarn 'MSVC not found - glpresent/rtxvsr DLLs will build on first run (or install VS Build Tools).'
+            Write-SetupWarn 'MSVC not found - native bridge DLLs need a minimal VS Build Tools install (~2 GB).'
+            Write-Host '         Bootstrapper: https://aka.ms/vs/17/release/vs_BuildTools.exe' -ForegroundColor DarkGray
+            Write-Host '         Individual components: MSVC v143 x64/x86 build tools + Windows 11 SDK' -ForegroundColor DarkGray
         }
         if (-not $tools.Cuda) {
-            Write-SetupWarn 'CUDA toolkit not found - native bridges need CUDA_PATH or a default install.'
+            $cudaUrl = Get-CudaToolkitDownloadUrl -Cuda $Cuda
+            $cudaVer = if ($Cuda -eq "cu121") { "12.1" } else { "12.8" }
+            Write-SetupWarn "CUDA toolkit not found - install CUDA $cudaVer for native bridge builds:"
+            Write-Host "         $cudaUrl" -ForegroundColor DarkGray
+            Write-Host "         (OpenCV fallback works without it; use --no-gl-present to skip GPU presenter.)" -ForegroundColor DarkGray
         }
         return
     }
@@ -66,7 +92,7 @@ function Install-NativeBridges {
             Write-SetupOk "glpresent_bridge.dll built"
         }
         else {
-            Write-SetupWarn 'glpresent build failed - OpenCV fallback will be used.'
+            Write-SetupWarn 'glpresent build failed - pass --no-gl-present to use OpenCV, or install MSVC + CUDA toolkit.'
         }
 
         if ($env:NV_RTX_VIDEO_SDK -or (Get-Content (Join-Path $ProjectRoot "visualizer_settings.json") -ErrorAction SilentlyContinue | Select-String "rtx")) {
@@ -80,7 +106,9 @@ function Install-NativeBridges {
             }
         }
         else {
-            Write-SetupWarn 'NV_RTX_VIDEO_SDK not set - skipping rtxvsr build (enable upscale after installing RTX Video SDK).'
+            Write-SetupWarn 'NV_RTX_VIDEO_SDK not set - skipping rtxvsr build.'
+            Write-Host "         Download RTX Video SDK: https://developer.nvidia.com/rtx-video-sdk" -ForegroundColor DarkGray
+            Write-Host "         Set NV_RTX_VIDEO_SDK to the SDK root, or pass --no-upscale at runtime." -ForegroundColor DarkGray
         }
     }
     finally {

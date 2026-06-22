@@ -279,6 +279,17 @@ class StreamPipeline:
         if out_w <= self.width and out_h <= self.height:
             logger.info("Upscale target <= generation size; skipping RTX VSR.")
             return None
+
+        from music_visualizer.utils.rtx_video_sdk import (
+            is_valid_rtx_sdk_root,
+            log_rtx_sdk_missing_help,
+        )
+
+        sdk_path = config.resolved_rtx_sdk_path()
+        if not is_valid_rtx_sdk_root(sdk_path):
+            log_rtx_sdk_missing_help(sdk_path, logger)
+            return None
+
         try:
             from music_visualizer.generation.upscaler import RTXUpscaler
 

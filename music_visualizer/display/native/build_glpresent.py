@@ -17,6 +17,9 @@ import tempfile
 from pathlib import Path
 from typing import Optional
 
+from music_visualizer.utils.cuda_toolkit import require_cuda_root
+from music_visualizer.utils.msvc_toolchain import require_msvc_env
+
 HERE = Path(__file__).resolve().parent
 SRC = HERE / "glpresent_bridge.cpp"
 DLL = HERE / "glpresent_bridge.dll"
@@ -36,41 +39,11 @@ _UI_PROBE_SYMBOL = "glpresent_ui_set_params"
 
 
 def _cuda_root() -> Path:
-    candidates = []
-    if os.environ.get("CUDA_PATH"):
-        candidates.append(Path(os.environ["CUDA_PATH"]))
-    base = Path(r"C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA")
-    if base.is_dir():
-        candidates.extend(sorted(base.glob("v*"), reverse=True))
-    for c in candidates:
-        if (c / "include" / "cudaGL.h").is_file() and (
-            c / "lib" / "x64" / "cuda.lib"
-        ).is_file():
-            return c
-    raise RuntimeError(
-        "Could not find a CUDA toolkit with cudaGL.h + lib/x64/cuda.lib. "
-        "Install the CUDA toolkit or set CUDA_PATH."
-    )
+    return require_cuda_root(header="cudaGL.h")
 
 
-def _vcvars() -> Path:
-    vswhere = Path(
-        os.environ.get("ProgramFiles(x86)", r"C:\Program Files (x86)")
-    ) / "Microsoft Visual Studio" / "Installer" / "vswhere.exe"
-    if not vswhere.is_file():
-        raise RuntimeError(f"vswhere.exe not found at {vswhere}. Install Visual Studio.")
-    out = subprocess.check_output(
-        [str(vswhere), "-latest", "-products", "*",
-         "-requires", "Microsoft.VisualStudio.Component.VC.Tools.x86.x64",
-         "-property", "installationPath"],
-        text=True,
-    ).strip()
-    if not out:
-        raise RuntimeError("vswhere found no VS install with the C++ toolset.")
-    vcvars = Path(out) / "VC" / "Auxiliary" / "Build" / "vcvars64.bat"
-    if not vcvars.is_file():
-        raise RuntimeError(f"vcvars64.bat not found at {vcvars}.")
-    return vcvars
+def _vcvars() -> str:
+    return require_msvc_env(gl_presenter=True).call_line
 
 
 def _sources_newer_than_dll() -> bool:
@@ -199,7 +172,7 @@ def build(force: bool = False) -> Path:
         bat = Path(tmp) / "build.bat"
         bat.write_text(
             "@echo off\r\n"
-            f'call "{vcvars}" >nul\r\n'
+            f"{vcvars}\r\n"
             f"cd /d \"{tmp}\"\r\n"
             f"{cl_cmd}\r\n"
             "exit /b %ERRORLEVEL%\r\n",

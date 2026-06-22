@@ -101,10 +101,9 @@ class RTXUpscaler:
 
         root = sdk_root or os.environ.get("NV_RTX_VIDEO_SDK")
         if not root:
-            raise RuntimeError(
-                "NV_RTX_VIDEO_SDK is not set and no sdk_root was given; cannot "
-                "locate the RTX Video SDK for upscaling."
-            )
+            from music_visualizer.utils.rtx_video_sdk import rtx_video_sdk_install_help
+
+            raise RuntimeError(rtx_video_sdk_install_help())
         self.sdk_root = Path(root)
         self._dll_dir = _feature_dll_dir(self.sdk_root)
 

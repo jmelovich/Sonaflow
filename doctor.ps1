@@ -166,6 +166,20 @@ Test-Doctor "rtxvsr_bridge.dll" { Test-Path $vsrDll } -Optional
 $nativeTools = Test-NativeBuildTools
 if (-not $nativeTools.Ok) {
     Write-Host "         MSVC: $($nativeTools.Msvc), CUDA toolkit: $($nativeTools.Cuda)" -ForegroundColor DarkGray
+    if (-not $nativeTools.Msvc) {
+        Write-Host '         Minimal install (~2 GB): https://aka.ms/vs/17/release/vs_BuildTools.exe' -ForegroundColor Yellow
+        Write-Host '         Components: MSVC v143 x64/x86 build tools + Windows 11 SDK' -ForegroundColor DarkGray
+        Write-Host '         Or pass --no-gl-present / --no-upscale.' -ForegroundColor DarkGray
+    }
+    if (-not $nativeTools.Cuda) {
+        $cudaProfile = "cu128"
+        if (Test-Path $venvPython) {
+            $torchCuda = (& $venvPython -c "import torch; print(getattr(torch.version,'cuda','') or '')" 2>$null).Trim()
+            if ($torchCuda -match '^12\.1') { $cudaProfile = "cu121" }
+        }
+        $cudaUrl = Get-CudaToolkitDownloadUrl -Cuda $cudaProfile
+        Write-Host "         Install CUDA toolkit: $cudaUrl" -ForegroundColor Yellow
+    }
 }
 
 Write-Host ""
@@ -177,7 +191,9 @@ if ($env:NV_RTX_VIDEO_SDK) {
     Write-Host "         $($env:NV_RTX_VIDEO_SDK)" -ForegroundColor DarkGray
 }
 else {
-    Write-Host '         Optional - required for RTX VSR upscaling (see docs/SETUP.md)' -ForegroundColor DarkGray
+    Write-Host '         Optional - required for RTX VSR upscaling' -ForegroundColor DarkGray
+    Write-Host '         Download: https://developer.nvidia.com/rtx-video-sdk' -ForegroundColor Yellow
+    Write-Host '         Set NV_RTX_VIDEO_SDK to the SDK root, or pass --no-upscale' -ForegroundColor DarkGray
 }
 
 Write-Host ""

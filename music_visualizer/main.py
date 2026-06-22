@@ -499,7 +499,7 @@ def _generation_loop(
     logger.info("Generation loop started.")
 
     # The GPU presenter must be created on this thread (its window + GL/CUDA
-    # contexts are thread-affine). On failure we fall back to the queue + OpenCV.
+    # contexts are thread-affine). When gl_request is set, failure is fatal.
     presenter = None
     if gl_request:
         try:
@@ -508,9 +508,12 @@ def _generation_loop(
                 ui_context=ui_context,
             )
         except Exception as exc:
-            logger.warning(
-                "GPU presenter unavailable (%s); using the OpenCV window.", exc
+            logger.error(
+                "GPU presenter failed (%s). Pass --no-gl-present to use the OpenCV window.",
+                exc,
             )
+            if gl_state is not None:
+                gl_state["fatal_error"] = str(exc)
             presenter = None
     if gl_state is not None:
         gl_state["active"] = presenter is not None
@@ -979,7 +982,11 @@ def main(argv: list[str] | None = None) -> int:
     if gl_request:
         from music_visualizer.display.native.build_glpresent import ensure_dll
 
-        ensure_dll(log=logger)
+        try:
+            ensure_dll(log=logger)
+        except RuntimeError as exc:
+            logger.error("%s", exc)
+            return 1
 
     gl_state: dict = {"active": False, "decided": threading.Event(), "pipeline": pipeline}
 
@@ -1007,7 +1014,21 @@ def main(argv: list[str] | None = None) -> int:
         gl_state["decided"].wait(timeout=120)
 
     try:
-        if gl_state["active"]:
+        if gl_request:
+            if not gl_state["active"]:
+                err = gl_state.get("fatal_error")
+                if err:
+                    logger.error(
+                        "GPU presenter required but unavailable: %s. "
+                        "Pass --no-gl-present to use the OpenCV window.",
+                        err,
+                    )
+                else:
+                    logger.error(
+                        "GPU presenter required but unavailable. "
+                        "Pass --no-gl-present to use the OpenCV window."
+                    )
+                return 1
             presenter = gl_state.get("presenter")
             use_tk_ui = bool(
                 presenter
