@@ -48,7 +48,9 @@ pywin32; sys_platform == "win32"
 
 opencv-python>=4.9.0,<4.12
 
-aubio>=0.4.9
+# Upstream aubio is source-only on Windows (needs MSVC). aubio-ledfx ships wheels.
+aubio>=0.4.9; sys_platform != "win32"
+aubio-ledfx>=0.4.11; sys_platform == "win32"
 
 sounddevice>=0.4.6
 

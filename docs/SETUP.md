@@ -131,8 +131,10 @@ First TensorRT run builds engines (~5–15 min), cached under `engines/` in the 
 |---------|-----|
 | `.venv` not found | Run `.\setup.ps1` |
 | NumPy / TensorRT errors | Re-run `.\setup.ps1` (pins numpy 1.26.4 + TRT 10) |
+| `aubio` build fails (MSVC) | Re-run `.\setup.ps1` — Windows uses prebuilt `aubio-ledfx` wheels (same `import aubio`) |
 | CUDA mismatch on RTX 30/40 | `.\setup.ps1 -Cuda cu121 -ForceSettings` |
 | Qwen not working | `.\setup.ps1 -Profile Full` (deps in main `.venv`; subprocess uses same interpreter) |
+| HF model download fails (WinError 1314) | Re-run `.\setup.ps1` — setup pre-probes symlink support before parallel downloads; or enable Windows Developer Mode |
 | RTX upscale fails | Install RTX Video SDK, set `NV_RTX_VIDEO_SDK` |
 
 ### Stale TensorRT engines

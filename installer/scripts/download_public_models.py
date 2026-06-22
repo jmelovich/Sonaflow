@@ -43,6 +43,12 @@ def main(argv: list[str] | None = None) -> int:
 
     from huggingface_hub import snapshot_download
 
+    # Import shared prefetch helper (repo root on sys.path when run from installer).
+    repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+    if repo_root not in sys.path:
+        sys.path.insert(0, repo_root)
+    from scripts.setup.hf_prefetch import prepare_hf_cache
+
     models: list[str] = []
     if not args.skip_core:
         models.extend(CORE_MODELS)
@@ -51,6 +57,8 @@ def main(argv: list[str] | None = None) -> int:
     if not models:
         print("Nothing to download (use default core set and/or --qwen).", file=sys.stderr)
         return 1
+
+    prepare_hf_cache(models)
 
     for model_id in models:
         print(f"Downloading {model_id} ...", flush=True)

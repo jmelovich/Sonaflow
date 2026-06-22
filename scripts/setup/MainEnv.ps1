@@ -52,7 +52,8 @@ function Install-MainEnv {
     }
 
     Write-Host "Upgrading pip ..."
-    & $python -m pip install --upgrade pip wheel setuptools
+    # Torch pins setuptools<82; do not upgrade setuptools here or pip/torch will fight on re-runs.
+    & $python -m pip install --upgrade pip wheel
     if ($LASTEXITCODE -ne 0) { throw "pip upgrade failed." }
 
     Write-Host "Installing PyTorch ($Cuda) from $torchIndexUrl ..."
