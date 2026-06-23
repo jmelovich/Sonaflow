@@ -3,8 +3,8 @@
   "group_collapsed": {
     "Audio": true,
     "Audio Reactive": true,
-    "Audio Routes": true,
-    "Beat Detection": true,
+    "Audio Routes": false,
+    "Beat Detection": false,
     "CLAP": true,
     "CLAP \u2014 Imagery": true,
     "CLAP \u2014 Imagery (tuning)": true,
@@ -12,14 +12,14 @@
     "CLAP \u2014 Mood (tuning)": true,
     "CLAP \u2014 Style": true,
     "CLAP \u2014 Style (tuning)": true,
-    "Content Centering": true,
-    "Display": true,
+    "Content Centering": false,
+    "Display": false,
     "Feedback Motion": true,
     "Generation": true,
     "Integration": true,
     "Prompt": false,
     "Qwen": false,
-    "Runtime": true,
+    "Runtime": false,
     "Upscaling": true
   }
 }

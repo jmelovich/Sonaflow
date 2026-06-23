@@ -109,7 +109,7 @@
     10
   ],
   "upscale": true,
-  "upscale_factor": 6,
+  "upscale_factor": 3,
   "vsr_quality": 4,
   "warmup": 10,
   "width": 1216,

@@ -24,6 +24,7 @@ from music_visualizer.utils.text import (
     english_only_text,
     filter_composed_addition,
     filter_prompt_addition,
+    normalize_blacklist_mode,
 )
 
 logger = get_logger(__name__)
@@ -304,6 +305,7 @@ class QwenOrchestrator:
     def sync_blacklist_from_config(self, cfg: Config) -> None:
         """Re-filter cached captions after live blacklist edits."""
         self.config = cfg
+        mode = normalize_blacklist_mode(cfg.prompt_blacklist_mode)
         with self._lock:
             pending = self._pending_caption
             last = self._last_caption
@@ -318,7 +320,11 @@ class QwenOrchestrator:
         if last:
             filtered = self._filter_caption(last)
             with self._lock:
-                self._last_caption = filtered or ""
+                if filtered is None:
+                    if mode != "discard":
+                        self._last_caption = ""
+                else:
+                    self._last_caption = filtered
 
     def _compose(self, caption: str) -> str:
         caption = caption.strip()

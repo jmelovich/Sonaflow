@@ -661,4 +661,7 @@ def ui_value_to_config(spec: ParamSpec, raw: Any) -> Any:
     if spec.key in ("engine_dir", "rtx_video_sdk_path", "clap_vocabs_dir",
                     "qwen_python", "audio_file", "react_routes_path") and not str(raw or "").strip():
         return None
+    if spec.key == "prompt_blacklist_mode":
+        from music_visualizer.utils.text import normalize_blacklist_mode
+        return normalize_blacklist_mode(str(raw))
     return str(raw)

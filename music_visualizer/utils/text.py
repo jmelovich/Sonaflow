@@ -12,6 +12,14 @@ _WHITESPACE = re.compile(r"\s+")
 PromptBlacklistMode = Literal["discard", "strip"]
 
 
+def normalize_blacklist_mode(mode: PromptBlacklistMode | str | None) -> PromptBlacklistMode:
+    """Coerce UI/settings values to a known blacklist mode."""
+    value = str(mode or "strip").strip().lower()
+    if value == "discard":
+        return "discard"
+    return "strip"
+
+
 def english_only_text(text: str) -> str:
     """Remove CJK and other non-English script from model output."""
     cleaned = _NON_ENGLISH.sub(" ", text)
@@ -78,7 +86,7 @@ def strip_blacklist_terms(
 def apply_prompt_blacklist(
     prompt: str,
     terms: Sequence[str],
-    mode: PromptBlacklistMode,
+    mode: PromptBlacklistMode | str,
     *,
     whole_words: bool = True,
 ) -> Optional[str]:
@@ -87,6 +95,7 @@ def apply_prompt_blacklist(
     Returns ``None`` when the addition should be rejected and the current prompt
     kept. In ``strip`` mode, returns the cleaned text (possibly unchanged).
     """
+    mode = normalize_blacklist_mode(mode)
     prompt = (prompt or "").strip()
     if not prompt or not terms:
         return prompt
@@ -122,11 +131,12 @@ def filter_composed_addition(
     base: str,
     addition: str,
     blacklist: str,
-    mode: PromptBlacklistMode,
+    mode: PromptBlacklistMode | str,
     *,
     whole_words: bool = True,
 ) -> Optional[str]:
     """Filter ``addition`` and append to exempt ``base`` prompt text."""
+    mode = normalize_blacklist_mode(mode)
     base = (base or "").strip()
     addition = (addition or "").strip()
     if not addition:
@@ -135,8 +145,10 @@ def filter_composed_addition(
         addition, blacklist, mode, whole_words=whole_words
     )
     if filtered is None:
-        # Addition rejected or fully stripped — fall back to the exempt base
-        # prompt instead of leaving a stale composed prompt in place.
+        if mode == "discard":
+            # Reject the whole addition; caller keeps the current composed prompt.
+            return None
+        # Strip mode: addition fully removed — fall back to the exempt base prompt.
         return base if base else None
     if not base:
         return filtered

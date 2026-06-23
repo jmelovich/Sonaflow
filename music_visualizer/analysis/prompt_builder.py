@@ -26,7 +26,12 @@ import math
 from dataclasses import dataclass, field
 from typing import Dict, Iterable, List, Literal, Optional, Tuple
 
-from music_visualizer.utils.text import apply_prompt_blacklist, parse_prompt_blacklist
+from music_visualizer.utils.text import (
+    apply_prompt_blacklist,
+    normalize_blacklist_mode,
+    parse_prompt_blacklist,
+    prompt_matches_blacklist,
+)
 
 TagDetail = Tuple[str, float, float]  # (phrase, compel_weight, smoothed_score)
 
@@ -136,12 +141,23 @@ class PromptBuilder:
         if not ranked:
             return self.base_prompt
         terms = parse_prompt_blacklist(self.prompt_blacklist)
+        mode = normalize_blacklist_mode(self.prompt_blacklist_mode)
+        if mode == "discard":
+            for phrase in ranked:
+                if prompt_matches_blacklist(
+                    phrase,
+                    terms,
+                    whole_words=self.prompt_blacklist_whole_words,
+                ):
+                    if self._last_composed is not None:
+                        return self._last_composed
+                    return self.base_prompt
         parts = [self.base_prompt]
         for phrase in ranked:
             filtered = apply_prompt_blacklist(
                 phrase,
                 terms,
-                self.prompt_blacklist_mode,
+                mode,
                 whole_words=self.prompt_blacklist_whole_words,
             )
             if not filtered:
@@ -187,12 +203,24 @@ class PromptBuilder:
     def weighted_tag_parts(self) -> List[str]:
         """Compel-weighted tag strings without the base prompt."""
         terms = parse_prompt_blacklist(self.prompt_blacklist)
+        mode = normalize_blacklist_mode(self.prompt_blacklist_mode)
+        ranked = sorted(
+            self._active.keys(), key=lambda p: self._scores.get(p, 0.0), reverse=True
+        )[: self.max_tags]
+        if mode == "discard":
+            for phrase in ranked:
+                if prompt_matches_blacklist(
+                    phrase,
+                    terms,
+                    whole_words=self.prompt_blacklist_whole_words,
+                ):
+                    return []
         parts: List[str] = []
-        for phrase in self.active_tags():
+        for phrase in ranked:
             filtered = apply_prompt_blacklist(
                 phrase,
                 terms,
-                self.prompt_blacklist_mode,
+                mode,
                 whole_words=self.prompt_blacklist_whole_words,
             )
             if filtered:
