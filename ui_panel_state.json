@@ -1,0 +1,25 @@
+{
+  "_comment": "Settings panel section collapse state (true = collapsed).",
+  "group_collapsed": {
+    "Audio": true,
+    "Audio Reactive": true,
+    "Audio Routes": true,
+    "Beat Detection": true,
+    "CLAP": true,
+    "CLAP \u2014 Imagery": true,
+    "CLAP \u2014 Imagery (tuning)": true,
+    "CLAP \u2014 Mood": true,
+    "CLAP \u2014 Mood (tuning)": true,
+    "CLAP \u2014 Style": true,
+    "CLAP \u2014 Style (tuning)": true,
+    "Content Centering": true,
+    "Display": true,
+    "Feedback Motion": true,
+    "Generation": true,
+    "Integration": true,
+    "Prompt": false,
+    "Qwen": false,
+    "Runtime": true,
+    "Upscaling": true
+  }
+}

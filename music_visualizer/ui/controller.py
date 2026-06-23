@@ -30,7 +30,13 @@ from music_visualizer.audio.routing import (
     save_routes_file,
     set_route_field,
 )
+from music_visualizer.analysis.vocab_lists import (
+    parse_vocab_key,
+    save_all_vocab_lists,
+    set_vocab_field,
+)
 from music_visualizer.ui.ui_bridge import NativeUIBridge, UiAction
+from music_visualizer.ui.ui_panel_state import load_group_collapsed, save_group_collapsed
 from music_visualizer.utils.logging import get_logger, setup_logging
 
 logger = get_logger(__name__)
@@ -39,7 +45,7 @@ logger = get_logger(__name__)
 _AUDIO_RESTART_KEYS: Set[str] = {
     "audio_source", "audio_file", "audio_device", "audio_blocksize",
     "sample_rate", "hop_size", "fft_size",
-    "clap", "clap_model_id", "clap_device", "clap_vocab_path",
+    "clap", "clap_model_id", "clap_device", "clap_vocabs_dir",
     "qwen", "qwen_model_id", "qwen_python", "qwen_4bit", "qwen_port", "qwen_hold",
 }
 
@@ -111,8 +117,10 @@ class UIController:
         self._spec_by_key = {s.key: s for s in self._specs}
         self._pending_prompt_republish = False
         self._prompt_republish_at = 0.0
+        self._group_collapsed = load_group_collapsed(self._specs)
         if bridge is not None and bridge._available:
             bridge.set_schema(self._specs)
+            self._sync_group_collapsed_to_native()
             self.push_all_defaults()
             self.push_all_values()
             bridge.set_restart_pending(ctx.restart.pending)
@@ -125,6 +133,22 @@ class UIController:
     @property
     def specs(self) -> list[ParamSpec]:
         return self._specs
+
+    def is_group_collapsed(self, group: str) -> bool:
+        return bool(self._group_collapsed.get(group, True))
+
+    def set_group_collapsed(self, group: str, collapsed: bool) -> None:
+        if self._group_collapsed.get(group) == collapsed:
+            return
+        self._group_collapsed[group] = collapsed
+        save_group_collapsed(self._group_collapsed)
+        if self._bridge is not None and self._bridge.group_collapse_available:
+            self._bridge.set_group_collapsed(group, collapsed)
+
+    def _sync_group_collapsed_to_native(self) -> None:
+        if self._bridge is None or not self._bridge.group_collapse_available:
+            return
+        self._bridge.sync_group_collapsed(self._group_collapsed)
 
     def push_all_values(self) -> None:
         if self._bridge is None or not self._bridge._available:
@@ -172,6 +196,7 @@ class UIController:
             return
         self._apply_numeric_changes()
         self._apply_text_changes()
+        self._apply_group_collapse_changes()
         self._mirror_live_prompt_text()
         self._flush_prompt_republish()
         self._handle_actions()
@@ -183,6 +208,17 @@ class UIController:
             spec = self._specs[idx]
             val = ui_value_to_config(spec, raw)
             self._set_config_value(spec, val)
+
+    def _apply_group_collapse_changes(self) -> None:
+        if self._bridge is None or not self._bridge.group_collapse_available:
+            return
+        changed = False
+        for group, collapsed in self._bridge.take_group_collapsed_changes():
+            if self._group_collapsed.get(group) != collapsed:
+                self._group_collapsed[group] = collapsed
+                changed = True
+        if changed:
+            save_group_collapsed(self._group_collapsed)
 
     def _apply_text_changes(self) -> None:
         for idx in self._bridge.take_text_changes():
@@ -206,6 +242,19 @@ class UIController:
             logger.info("Setting %s -> %s", spec.key, new_val)
             if self._ctx.mapper is not None:
                 self._ctx.mapper.sync_from_config()
+            return
+
+        parsed_vocab = parse_vocab_key(spec.key)
+        if parsed_vocab is not None:
+            idx, field_name = parsed_vocab
+            new_val = ui_value_to_config(spec, val)
+            old_val = config_value_for_ui(self._ctx.cfg, spec)
+            if old_val == new_val:
+                return
+            set_vocab_field(self._ctx.cfg, idx, field_name, new_val)
+            logger.info("Setting %s -> %s", spec.key, new_val)
+            if self._ctx.clap_orchestrator is not None:
+                self._ctx.clap_orchestrator.sync_from_config(self._ctx.cfg)
             return
 
         old = getattr(self._ctx.cfg, spec.key)
@@ -269,6 +318,10 @@ class UIController:
 
         if key.startswith("route") and ctx.mapper is not None:
             ctx.mapper.sync_from_config()
+            return
+
+        if key.startswith("vocab") and ctx.clap_orchestrator is not None:
+            ctx.clap_orchestrator.sync_from_config(cfg)
             return
 
         if key.startswith("beat_") and ctx.analyzer_thread is not None:
@@ -387,6 +440,12 @@ class UIController:
                 logger.info("Saved audio routes to %s", routes_path)
             except OSError as exc:
                 logger.warning("Could not save audio routes file: %s", exc)
+            try:
+                vocab_paths = save_all_vocab_lists(self._ctx.cfg)
+                for vp in vocab_paths:
+                    logger.info("Saved CLAP vocab list to %s", vp)
+            except OSError as exc:
+                logger.warning("Could not save CLAP vocab list files: %s", exc)
         if actions & UiAction.EXPORT:
             self._sync_text_from_ui()
             path = self._bridge.open_file_dialog(save=True)

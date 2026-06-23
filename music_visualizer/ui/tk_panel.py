@@ -9,13 +9,54 @@ from typing import Any, Dict, Optional
 from music_visualizer.config import Config
 from music_visualizer.ui.controller import UIController
 from music_visualizer.ui.persistence import export_settings, import_settings, save_defaults
-from music_visualizer.audio.routing import parse_route_key, set_route_field
+from music_visualizer.audio.routing import parse_route_key, routes_file_path, save_routes_file, set_route_field
+from music_visualizer.analysis.vocab_lists import parse_vocab_key, save_all_vocab_lists, set_vocab_field
 from music_visualizer.ui.settings_schema import (
     ParamKind,
     ParamSpec,
     config_value_for_ui,
     ui_value_to_config,
 )
+
+
+class _CollapsibleSection(ttk.Frame):
+    """Settings group that can expand/collapse; state is owned by UIController."""
+
+    def __init__(
+        self,
+        parent: tk.Widget,
+        title: str,
+        collapsed: bool,
+        on_toggle: Any,
+    ) -> None:
+        super().__init__(parent)
+        self._title = title
+        self._collapsed = collapsed
+        self._on_toggle = on_toggle
+        header = ttk.Frame(self)
+        header.pack(fill=tk.X)
+        sign = "\u25b8 " if collapsed else "\u25be "
+        self._btn = ttk.Button(
+            header,
+            text=sign + title,
+            command=self._toggle,
+            style="Toolbutton",
+        )
+        self._btn.pack(fill=tk.X, anchor=tk.W)
+        self.body = ttk.Frame(self)
+        if not collapsed:
+            self.body.pack(fill=tk.X, padx=4, pady=2)
+        self.pack(fill=tk.X, padx=6, pady=2)
+
+    def _toggle(self) -> None:
+        self._collapsed = not self._collapsed
+        sign = "\u25b8 " if self._collapsed else "\u25be "
+        self._btn.configure(text=sign + self._title)
+        if self._collapsed:
+            self.body.pack_forget()
+        else:
+            self.body.pack(fill=tk.X, padx=4, pady=2)
+        self._on_toggle(self._collapsed)
 
 
 class TkSettingsPanel:
@@ -93,13 +134,20 @@ class TkSettingsPanel:
         for spec in self._controller.specs:
             if spec.group != current_group:
                 current_group = spec.group
-                group_frame = ttk.LabelFrame(inner, text=spec.group)
-                group_frame.pack(fill=tk.X, padx=6, pady=4, anchor=tk.N)
+                section = _CollapsibleSection(
+                    inner,
+                    spec.group,
+                    self._controller.is_group_collapsed(spec.group),
+                    lambda collapsed, g=spec.group: self._controller.set_group_collapsed(
+                        g, collapsed
+                    ),
+                )
+                group_frame = section.body
             self._add_widget(group_frame, spec, config_value_for_ui(cfg, spec))
 
         self._root = root
 
-    def _add_widget(self, parent: ttk.LabelFrame, spec: ParamSpec, value: Any) -> None:
+    def _add_widget(self, parent: ttk.Frame, spec: ParamSpec, value: Any) -> None:
         row = ttk.Frame(parent)
         row.pack(fill=tk.X, padx=4, pady=4)
         lbl_style = "Restart.TLabel" if spec.requires_restart else "TLabel"
@@ -189,11 +237,27 @@ class TkSettingsPanel:
                 idx, field_name = parsed
                 set_route_field(cfg, idx, field_name, val)
             else:
-                setattr(cfg, spec.key, val)
+                parsed_vocab = parse_vocab_key(spec.key)
+                if parsed_vocab is not None:
+                    idx, field_name = parsed_vocab
+                    set_vocab_field(cfg, idx, field_name, val)
+                else:
+                    setattr(cfg, spec.key, val)
 
     def _save_defaults(self) -> None:
         self._sync_vars_to_config()
         path = save_defaults(self._controller._ctx.cfg)
+        try:
+            save_routes_file(
+                routes_file_path(self._controller._ctx.cfg),
+                self._controller._ctx.cfg.react_routes or [],
+            )
+        except OSError:
+            pass
+        try:
+            save_all_vocab_lists(self._controller._ctx.cfg)
+        except OSError:
+            pass
         messagebox.showinfo("Saved", f"Defaults saved to\n{path}", parent=self._root)
 
     def _export(self) -> None:

@@ -19,6 +19,8 @@
 #include <cstring>
 #include <string>
 #include <vector>
+#include <unordered_map>
+#include <unordered_set>
 #include <algorithm>
 #include <cmath>
 
@@ -185,6 +187,13 @@ struct UiParamState {
 };
 
 std::vector<UiParamState> g_params;
+std::unordered_map<std::wstring, bool> g_group_collapsed;  // true = collapsed
+struct GroupCollapseChange {
+    std::wstring group;
+    bool collapsed;
+};
+std::vector<GroupCollapseChange> g_pending_group_collapse;
+std::unordered_set<std::wstring> g_group_collapse_force;
 bool g_panel_open = false;       // F1 toggles the docked settings panel
 bool g_popped_out = false;       // panel in separate viewport window
 bool g_restart_pending = false;
@@ -516,7 +525,22 @@ static void render_settings_panel(bool as_popup) {
     int group_start = 0;
     auto render_group = [&](int start, int end, const std::wstring& name) {
         std::string hdr = wide_to_utf8(name.c_str());
-        if (!ImGui::CollapsingHeader(hdr.c_str(), ImGuiTreeNodeFlags_DefaultOpen))
+        auto collapsed_it = g_group_collapsed.find(name);
+        const bool was_collapsed =
+            collapsed_it == g_group_collapsed.end() ? true : collapsed_it->second;
+        // CollapsingHeader(label, bool* p_open) hides the header when *p_open is
+        // false (visibility, not collapse). Use SetNextItemOpen for collapse state.
+        if (g_group_collapse_force.count(name)) {
+            ImGui::SetNextItemOpen(!was_collapsed, ImGuiCond_Always);
+            g_group_collapse_force.erase(name);
+        }
+        const bool open = ImGui::CollapsingHeader(hdr.c_str());
+        const bool collapsed = !open;
+        if (collapsed != was_collapsed) {
+            g_group_collapsed[name] = collapsed;
+            g_pending_group_collapse.push_back({name, collapsed});
+        }
+        if (!open)
             return;
         ImGui::Indent(4.0f);
         for (int i = start; i < end; ++i) {
@@ -1091,6 +1115,24 @@ EXPORT int glpresent_ui_take_actions() {
 
 EXPORT void glpresent_ui_set_restart_pending(int pending) {
     g_restart_pending = pending != 0;
+}
+
+EXPORT void glpresent_ui_set_group_collapsed(const wchar_t* group, int collapsed) {
+    if (!group) return;
+    g_group_collapsed[group] = collapsed != 0;
+    g_group_collapse_force.insert(group);
+}
+
+EXPORT int glpresent_ui_take_group_collapsed_changes(
+    wchar_t* group_out, int group_cap, int* collapsed_out) {
+    if (g_pending_group_collapse.empty()) return 0;
+    GroupCollapseChange ch = std::move(g_pending_group_collapse.front());
+    g_pending_group_collapse.erase(g_pending_group_collapse.begin());
+    if (group_out && group_cap > 0) {
+        wcsncpy_s(group_out, (size_t)group_cap, ch.group.c_str(), _TRUNCATE);
+    }
+    if (collapsed_out) *collapsed_out = ch.collapsed ? 1 : 0;
+    return 1;
 }
 
 EXPORT int glpresent_ui_open_file_dialog(int save_mode, wchar_t* out_path, int cap) {

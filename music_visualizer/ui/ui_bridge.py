@@ -103,6 +103,19 @@ class NativeUIBridge:
         lib.glpresent_ui_is_visible.restype = ctypes.c_int
         lib.glpresent_ui_set_visible.argtypes = [ctypes.c_int]
         lib.glpresent_ui_set_visible.restype = None
+        if hasattr(lib, "glpresent_ui_set_group_collapsed"):
+            lib.glpresent_ui_set_group_collapsed.argtypes = [
+                ctypes.c_wchar_p, ctypes.c_int,
+            ]
+            lib.glpresent_ui_set_group_collapsed.restype = None
+            lib.glpresent_ui_take_group_collapsed_changes.argtypes = [
+                ctypes.c_wchar_p, ctypes.c_int, ctypes.POINTER(ctypes.c_int),
+            ]
+            lib.glpresent_ui_take_group_collapsed_changes.restype = ctypes.c_int
+
+    @property
+    def group_collapse_available(self) -> bool:
+        return self._available and hasattr(self._lib, "glpresent_ui_set_group_collapsed")
 
     def set_schema(self, specs: Sequence[ParamSpec]) -> None:
         if not self._available:
@@ -195,3 +208,28 @@ class NativeUIBridge:
 
     def take_ui_toggle(self) -> bool:
         return bool(self._lib.glpresent_take_ui_toggle())
+
+    def set_group_collapsed(self, group: str, collapsed: bool) -> None:
+        if not self.group_collapse_available:
+            return
+        self._lib.glpresent_ui_set_group_collapsed(group, 1 if collapsed else 0)
+
+    def sync_group_collapsed(self, states: dict[str, bool]) -> None:
+        if not self.group_collapse_available:
+            return
+        for group, collapsed in states.items():
+            self.set_group_collapsed(group, collapsed)
+
+    def take_group_collapsed_changes(self, max_n: int = 32) -> list[tuple[str, bool]]:
+        if not self.group_collapse_available:
+            return []
+        out: list[tuple[str, bool]] = []
+        buf = ctypes.create_unicode_buffer(256)
+        collapsed = ctypes.c_int()
+        for _ in range(max_n):
+            if not self._lib.glpresent_ui_take_group_collapsed_changes(
+                buf, len(buf), ctypes.byref(collapsed),
+            ):
+                break
+            out.append((buf.value, bool(collapsed.value)))
+        return out

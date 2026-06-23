@@ -1,25 +1,20 @@
 """The CLAP prompt-injection loop, on its own thread.
 
-Periodically (every ``clap_interval_sec``) it reads the most recent
-``clap_window_sec`` of audio from the :class:`AudioRing`, scores it with
-:class:`CLAPAnalyzer`, folds the scores through :class:`PromptBuilder` (along
-with the latest editable base prompt), and publishes any changed result to the
-active :class:`SharedPrompt` that the generation loop consumes.
-
-Running off the generation/audio threads keeps CLAP inference (~10-30 ms) from
-stalling either the realtime audio callback or the frame loop. A smaller window
-reduces lag (the tag tracks the music more tightly) at the cost of CLAP
-confidence; both window and interval are configurable.
+Each vocabulary list scores on its own ``interval_sec`` schedule. The loop wakes
+often enough to honor the tightest enabled interval, embeds audio once per wake
+when any list is due, scores only those lists, and merges stabilized tags through
+:class:`MultiPromptBuilder`.
 """
 
 from __future__ import annotations
 
 import threading
 import time
-from typing import List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 
 from music_visualizer.analysis.clap_analyzer import CLAPAnalyzer
-from music_visualizer.analysis.prompt_builder import PromptBuilder, TagDetail
+from music_visualizer.analysis.prompt_builder import MultiPromptBuilder, TagDetail
+from music_visualizer.analysis.vocab_lists import VocabList, normalize_vocab_lists
 from music_visualizer.config import Config
 from music_visualizer.utils.logging import get_logger
 from music_visualizer.utils.shared_state import AudioRing, SharedPrompt
@@ -27,15 +22,17 @@ from music_visualizer.utils.text import filter_prompt_addition
 
 logger = get_logger(__name__)
 
+_MIN_TICK_SEC = 0.05
+
 
 class PromptOrchestrator:
-    """Drives CLAP -> PromptBuilder -> active prompt on a background thread."""
+    """Drives CLAP -> MultiPromptBuilder -> active prompt on a background thread."""
 
     def __init__(
         self,
         config: Config,
         analyzer: CLAPAnalyzer,
-        builder: PromptBuilder,
+        builder: MultiPromptBuilder,
         audio_ring: AudioRing,
         base_prompt: SharedPrompt,
         active_prompt: SharedPrompt,
@@ -51,10 +48,6 @@ class PromptOrchestrator:
         self._active = active_prompt
         self._shutdown = shutdown
         self._stop = stop_event or threading.Event()
-        # Optional off-thread prompt encoding: when a pipeline + embeds slot are
-        # wired in, this thread encodes the composed prompt and hands the ready
-        # tensor to the generation loop, keeping the CLIP encode off the render
-        # hot path (the source of the per-cycle stutter).
         self._embeds_slot = embeds_slot
         self._pipeline = None
         self._pipeline_lock = threading.Lock()
@@ -64,11 +57,13 @@ class PromptOrchestrator:
         self._lock = threading.Lock()
         self._tags: List[str] = []
         self._tag_details: List[TagDetail] = []
-        self._raw_top: List[Tuple[str, float]] = []
+        self._raw_top: Dict[str, List[Tuple[str, float]]] = {}
         self._audio_sec: float = 0.0
         self._status: str = "starting"
         self._last_score_ms: float = 0.0
         self._score_ms_ema: float = 0.0
+        self._last_score_time: Dict[str, float] = {}
+        self._last_builder_update: Dict[str, float] = {}
         self._thread = threading.Thread(
             target=self._run, name="prompt-orchestrator", daemon=True
         )
@@ -77,22 +72,14 @@ class PromptOrchestrator:
         self._thread.start()
 
     def set_pipeline(self, pipeline) -> None:
-        """Attach the pipeline so embeddings are encoded on this thread.
-
-        Called after the pipeline is built (it doesn't exist when the
-        orchestrator starts). Forces a one-shot re-encode of the current
-        composed prompt so the initial tags apply even if they've gone stable.
-        """
         with self._pipeline_lock:
             self._pipeline = pipeline
             self._force_embeds = True
 
     def set_qwen_orchestrator(self, qwen_orchestrator) -> None:
-        """Merge Qwen captions onto the manual base before CLAP composes tags."""
         self._qwen = qwen_orchestrator
 
     def sync_blacklist_from_config(self, cfg: Config) -> None:
-        """Apply live blacklist edits to the CLAP prompt builder."""
         self.config = cfg
         self._builder.apply_blacklist(
             cfg.prompt_blacklist,
@@ -101,27 +88,13 @@ class PromptOrchestrator:
         )
 
     def sync_from_config(self, cfg: Config) -> None:
-        """Apply live UI edits to CLAP builder/analyzer tuning."""
         self.config = cfg
-        b = self._builder
-        b.enter_threshold = cfg.clap_enter_threshold
-        b.exit_threshold = cfg.clap_exit_threshold
-        b.score_tau = cfg.clap_score_tau
-        b.min_hold_sec = cfg.clap_min_hold_sec
-        b.weight_min = cfg.clap_weight_min
-        b.weight_max = cfg.clap_weight_max
-        b.weight_step = cfg.clap_weight_step
-        b.max_tags = cfg.clap_max_tags
+        lists = normalize_vocab_lists(cfg.clap_vocab_lists)
+        self._builder.sync_from_lists(lists)
+        self._analyzer.sync_channels(lists)
         self.sync_blacklist_from_config(cfg)
-        a = self._analyzer
-        a.softmax_temp = cfg.clap_softmax_temp
-        a.calibrate = cfg.clap_calibrate
-        a.calib_alpha = cfg.clap_calib_alpha
-        a.calib_warmup = cfg.clap_calib_warmup
-        a.calib_spike_guard = cfg.clap_calib_spike_guard
 
     def _filtered_qwen_caption(self) -> str:
-        """Return the latest Qwen caption after the current blacklist rules."""
         if self._qwen is None:
             return ""
         caption = self._qwen.last_caption().strip()
@@ -142,13 +115,34 @@ class PromptOrchestrator:
             return f"{manual}, {caption}" if manual else caption
         return manual
 
+    def _vocab_lists(self) -> List[VocabList]:
+        return [VocabList.from_dict(item) for item in normalize_vocab_lists(self.config.clap_vocab_lists)]
+
+    def _tick_interval(self) -> float:
+        intervals = [
+            max(_MIN_TICK_SEC, float(vl.interval_sec))
+            for vl in self._vocab_lists()
+            if vl.enable
+        ]
+        if not intervals:
+            return 1.0
+        return max(_MIN_TICK_SEC, min(intervals) / 4.0)
+
+    def _due_vocab_ids(self, now: float) -> List[str]:
+        due: List[str] = []
+        for vl in self._vocab_lists():
+            if not vl.enable:
+                continue
+            last = self._last_score_time.get(vl.id, 0.0)
+            if last <= 0.0 or now - last >= max(_MIN_TICK_SEC, float(vl.interval_sec)):
+                due.append(vl.id)
+        return due
+
     def _publish_composed(self, composed: str) -> None:
-        """Publish a composed prompt to the active prompt channel."""
         self._current_composed = composed
         self._active.set(composed)
 
     def republish_from_base(self) -> None:
-        """Re-compose and push the active prompt after a manual base edit."""
         self._builder.set_base_prompt(self._effective_base_prompt())
         composed = self._builder.compose_now()
         self._publish_composed(composed)
@@ -170,9 +164,8 @@ class PromptOrchestrator:
             return list(self._tags)
 
     def overlay_lines(self) -> List[str]:
-        """Debug overlay lines: raw CLAP top-k, injected tags, and status."""
         with self._lock:
-            raw = list(self._raw_top)
+            raw = dict(self._raw_top)
             details = list(self._tag_details)
             audio_sec = self._audio_sec
             status = self._status
@@ -181,48 +174,56 @@ class PromptOrchestrator:
         if audio_sec < 0.25:
             lines.append(f"CLAP: waiting for audio ({audio_sec:.2f}s buffered)")
             return lines
+        lists = self._vocab_lists()
         if raw:
-            parts = [f"{phrase} {score:.2f}" for phrase, score in raw]
-            lines.append(f"CLAP top ({score_ms:.0f}ms): " + " | ".join(parts))
+            for vl in lists:
+                hits = raw.get(vl.id, [])
+                if hits:
+                    parts = [f"{phrase} {score:.2f}" for phrase, score in hits]
+                    lines.append(f"CLAP {vl.name} ({score_ms:.0f}ms): " + " | ".join(parts))
         else:
             lines.append(f"CLAP: no scores ({status})")
         if details:
             for phrase, weight, score in details:
                 lines.append(f"  + ({phrase}) w={weight:.2f} score={score:.3f}")
+        elif lists:
+            lines.append(
+                f"CLAP tags: none active (need score>={lists[0].enter_threshold:.2f})"
+            )
         else:
-            enter = self.config.clap_enter_threshold
-            lines.append(f"CLAP tags: none active (need score>={enter:.2f})")
+            lines.append("CLAP tags: none active")
         return lines
 
     def _run(self) -> None:
         cfg = self.config
-        interval = max(0.05, float(cfg.clap_interval_sec))
         window_sec = float(cfg.clap_window_sec)
-        top_k = int(cfg.clap_top_k)
+        lists = self._vocab_lists()
         logger.info(
-            "Prompt orchestrator started (window=%.2fs interval=%.2fs top_k=%d).",
-            window_sec, interval, top_k,
+            "Prompt orchestrator started (window=%.2fs vocabs=%d).",
+            window_sec, len(lists),
         )
-        last = time.time()
+        start = time.time()
+        self._last_builder_update = {vl.id: start for vl in lists}
         while not self._shutdown.is_set() and not self._stop.is_set():
-            # Pick up manual base-prompt edits and any Qwen caption layer.
             self._builder.set_base_prompt(self._effective_base_prompt())
 
+            now = time.time()
+            due_ids = self._due_vocab_ids(now)
             window = self._ring.read_latest_seconds(window_sec)
             audio_sec = window.shape[0] / float(self._ring.sample_rate)
-            now = time.time()
-            dt = now - last
-            last = now
             prev_tags = self._builder.active_tags()
             score_ms = 0.0
-            if audio_sec < 0.25:
+            results: Dict[str, List[Tuple[str, float]]] = {}
+
+            if not due_ids:
+                status = "waiting"
+            elif audio_sec < 0.25:
                 status = "buffering audio"
-                results: List[Tuple[str, float]] = []
             else:
                 try:
                     t0 = time.perf_counter()
-                    results = self._analyzer.score(
-                        window, self._ring.sample_rate, top_k=top_k
+                    results = self._analyzer.score_all(
+                        window, self._ring.sample_rate, only_ids=set(due_ids),
                     )
                     score_ms = (time.perf_counter() - t0) * 1000.0
                     self._score_ms_ema = (
@@ -232,28 +233,44 @@ class PromptOrchestrator:
                     status = "ok" if results else "empty score"
                 except Exception:
                     logger.exception("CLAP scoring failed; keeping previous prompt.")
-                    results = []
                     status = "score error"
 
-            composed = self._builder.update(results, now, dt)
+            channel_dt: Dict[str, float] = {}
+            for vocab_id in due_ids:
+                prev = self._last_builder_update.get(vocab_id, now)
+                channel_dt[vocab_id] = max(0.0, now - prev)
+                if vocab_id in results:
+                    self._last_score_time[vocab_id] = now
+                    self._last_builder_update[vocab_id] = now
+
+            composed = None
+            if due_ids and results:
+                composed = self._builder.update(
+                    results, now, channel_dt, scored_ids=due_ids,
+                )
+            if composed is None and self._builder._last_composed is None:
+                composed = self._builder.compose_now()
+
             tags = self._builder.active_tags()
             details = self._builder.active_tag_details()
             with self._lock:
                 self._tags = tags
                 self._tag_details = details
-                self._raw_top = results
+                for vocab_id, hits in results.items():
+                    self._raw_top[vocab_id] = hits
                 self._audio_sec = audio_sec
                 self._status = status
                 self._last_score_ms = score_ms
 
             added = [t for t in tags if t not in prev_tags]
             removed = [t for t in prev_tags if t not in tags]
-            logger.debug(
-                "CLAP cycle audio=%.2fs score=%.1fms top=%s injected=%s",
-                audio_sec, score_ms,
-                [(p, round(s, 3)) for p, s in results],
-                [(p, round(w, 2), round(s, 3)) for p, w, s in details],
-            )
+            if due_ids:
+                logger.debug(
+                    "CLAP cycle due=%s audio=%.2fs score=%.1fms raw=%s injected=%s",
+                    due_ids, audio_sec, score_ms,
+                    {k: [(p, round(s, 3)) for p, s in v] for k, v in results.items()},
+                    [(p, round(w, 2), round(s, 3)) for p, w, s in details],
+                )
             if added:
                 logger.debug("CLAP +tags: %s", ", ".join(added))
             if removed:
@@ -262,9 +279,6 @@ class PromptOrchestrator:
                 self._publish_composed(composed)
                 logger.debug("CLAP prompt updated")
 
-            # Encode the composed prompt off the render thread and hand the
-            # generation loop a ready tensor. Re-encode when the prompt changed,
-            # or once right after the pipeline first becomes available.
             if self._embeds_slot is not None:
                 with self._pipeline_lock:
                     pipeline = self._pipeline
@@ -276,6 +290,5 @@ class PromptOrchestrator:
                         if embeds is not None:
                             self._embeds_slot.set(embeds)
 
-            # Sleep the remainder of the interval, waking early on shutdown.
-            self._shutdown.wait(timeout=interval)
+            self._shutdown.wait(timeout=self._tick_interval())
         logger.info("Prompt orchestrator stopped.")

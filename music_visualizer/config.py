@@ -167,30 +167,8 @@ class Config:
     clap_window_sec: float = 4.0       # audio window scored each cycle (encoder
                                        # cost scales with this; smaller = smaller
                                        # per-cycle GPU hitch against generation)
-    clap_interval_sec: float = 1.0     # seconds between CLAP scorings
-    clap_top_k: int = 3                # phrases retrieved per cycle
-    clap_max_tags: int = 3             # max tags appended to the prompt
-    clap_enter_threshold: float = 0.12 # smoothed score to activate a tag
-    clap_exit_threshold: float = 0.06  # smoothed score below which a tag drops
-    clap_score_tau: float = 1.5        # EMA time constant (s) for tag scores
-    clap_min_hold_sec: float = 1.5     # minimum time a tag stays active
-    clap_weight_min: float = 0.7       # compel weight at the enter threshold
-    clap_weight_max: float = 1.4       # compel weight at strong confidence
-    clap_weight_step: float = 0.1      # quantize weights; larger = fewer prompt
-                                       # re-encodes (less stutter), coarser emphasis
-    clap_softmax_temp: float = 0.02    # CLAP similarity softmax temperature
-    # Hubness calibration: subtract each phrase's running-average similarity so
-    # the same generic "hub" phrases don't win for every track. Disable to rank
-    # on raw similarity. Smaller alpha = slower baseline (more global prior).
-    clap_calibrate: bool = True
-    clap_calib_alpha: float = 0.001    # EMA rate for the per-phrase baseline
-    clap_calib_warmup: int = 8         # cycles before trusting the baseline
-    # Spike protection (cosine-sim units): damps the baseline's *upward* update
-    # for phrases spiking above their baseline, so a strong, unique match held
-    # over a long stretch isn't slowly absorbed into its own baseline and
-    # discarded. 0 = original symmetric EMA; larger = less protection.
-    clap_calib_spike_guard: float = 0.05
-    clap_vocab_path: Optional[str] = None  # JSON array override for the vocab
+    clap_vocabs_dir: Optional[str] = None  # default: <data dir>/clap_vocabs/
+    clap_vocab_lists: Optional[List[dict]] = None  # loaded from clap_vocabs_dir
 
     # --- Qwen2-Audio captioning (sidecar subprocess, same .venv) ---
     # Runs Qwen2-Audio-7B-Instruct in a child process (modern transformers +
@@ -393,6 +371,26 @@ class Config:
         if self.qwen_blend_sec is None:
             self.qwen_blend_sec = float(self.qwen_min_interval_sec)
         self._resolve_routes()
+        self._resolve_vocab_lists()
+
+    def _resolve_vocab_lists(self) -> None:
+        """Load CLAP vocabulary lists from the external directory."""
+        from music_visualizer.analysis.vocab_lists import (
+            load_vocab_lists_dir,
+            normalize_vocab_lists,
+            seed_default_vocab_files,
+            vocabs_dir_path,
+        )
+
+        path = vocabs_dir_path(self)
+        loaded = load_vocab_lists_dir(path)
+        if loaded is not None:
+            self.clap_vocab_lists = loaded
+            return
+        try:
+            self.clap_vocab_lists = seed_default_vocab_files(path)
+        except OSError:
+            self.clap_vocab_lists = normalize_vocab_lists(self.clap_vocab_lists)
 
     def _resolve_routes(self) -> None:
         """Load the routing matrix from the external file (authoritative).

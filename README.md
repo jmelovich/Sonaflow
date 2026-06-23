@@ -61,7 +61,7 @@ While the window is open, type a new prompt in the **terminal** and press Enter.
 | `--width` / `--height` | `512` | New resolution triggers engine rebuild |
 | `--benchmark N` | off | Headless FPS over N frames |
 
-Settings persist in `visualizer_settings.json` (created by setup; gitignored). See [`docs/settings.md`](./docs/settings.md).
+Settings persist in `visualizer_settings.json` (created by setup; gitignored). CLAP tag vocabularies live in `clap_vocabs/` — see [`docs/clap_vocab_lists.md`](./docs/clap_vocab_lists.md). See [`docs/settings.md`](./docs/settings.md).
 
 ## Layout
 

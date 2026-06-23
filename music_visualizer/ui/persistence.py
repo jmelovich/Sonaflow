@@ -21,7 +21,17 @@ DEFAULTS_PATH = _settings_path()
 # Fields not persisted in the main settings file. ``react_routes`` lives in the
 # external routes file (react_routes_path); persisting it here too would create
 # a second, conflicting source of truth.
-_SKIP_KEYS = frozenset({"benchmark", "react_routes"})
+_SKIP_KEYS = frozenset({"benchmark", "react_routes", "clap_vocab_lists"})
+
+
+def _valid_config_keys() -> frozenset[str]:
+    return frozenset(f.name for f in fields(Config))
+
+
+def filter_config_dict(data: dict[str, Any]) -> dict[str, Any]:
+    """Drop unknown keys (e.g. removed CLAP fields from older settings files)."""
+    valid = _valid_config_keys()
+    return {k: v for k, v in data.items() if k in valid}
 
 
 def _config_to_dict(cfg: Config) -> dict[str, Any]:
@@ -108,4 +118,4 @@ def merge_defaults(base: Config, defaults: dict[str, Any], overrides: dict[str, 
     """
     merged = dict(defaults)
     merged.update(overrides)
-    return Config(**merged)
+    return Config(**filter_config_dict(merged))

@@ -24,7 +24,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass, field
-from typing import Dict, List, Literal, Optional, Tuple
+from typing import Dict, Iterable, List, Literal, Optional, Tuple
 
 from music_visualizer.utils.text import apply_prompt_blacklist, parse_prompt_blacklist
 
@@ -183,3 +183,165 @@ class PromptBuilder:
             (phrase, self._weight_for(phrase), self._scores.get(phrase, 0.0))
             for phrase in ranked
         ]
+
+    def weighted_tag_parts(self) -> List[str]:
+        """Compel-weighted tag strings without the base prompt."""
+        terms = parse_prompt_blacklist(self.prompt_blacklist)
+        parts: List[str] = []
+        for phrase in self.active_tags():
+            filtered = apply_prompt_blacklist(
+                phrase,
+                terms,
+                self.prompt_blacklist_mode,
+                whole_words=self.prompt_blacklist_whole_words,
+            )
+            if filtered:
+                parts.append(f"({filtered}){self._weight_for(phrase):.2f}")
+        return parts
+
+
+@dataclass
+class MultiPromptBuilder:
+    """Merges stabilized tags from multiple CLAP vocabulary channels."""
+
+    base_prompt: str
+    channel_order: List[str] = field(default_factory=list)
+    builders: Dict[str, PromptBuilder] = field(default_factory=dict, init=False)
+    prompt_blacklist: str = ""
+    prompt_blacklist_mode: PromptBlacklistMode = "strip"
+    prompt_blacklist_whole_words: bool = True
+    _last_composed: Optional[str] = field(default=None, init=False)
+
+    def set_base_prompt(self, prompt: str) -> None:
+        prompt = (prompt or "").strip()
+        if self.base_prompt == prompt:
+            return
+        self.base_prompt = prompt
+        self._last_composed = None
+
+    def apply_blacklist(
+        self,
+        blacklist: str,
+        mode: PromptBlacklistMode,
+        *,
+        whole_words: bool = True,
+    ) -> bool:
+        changed = (
+            self.prompt_blacklist != blacklist
+            or self.prompt_blacklist_mode != mode
+            or self.prompt_blacklist_whole_words != whole_words
+        )
+        self.prompt_blacklist = blacklist
+        self.prompt_blacklist_mode = mode
+        self.prompt_blacklist_whole_words = whole_words
+        for builder in self.builders.values():
+            builder.apply_blacklist(blacklist, mode, whole_words=whole_words)
+        if changed:
+            self._last_composed = None
+        return changed
+
+    def sync_from_lists(self, lists: List[dict]) -> None:
+        """Rebuild channel builders when vocab lists change (e.g. live UI edits)."""
+        from music_visualizer.analysis.vocab_lists import VocabList, normalize_vocab_lists
+
+        normalized = normalize_vocab_lists(lists)
+        self.channel_order = [str(item["id"]) for item in normalized]
+        new_builders: Dict[str, PromptBuilder] = {}
+        for item in normalized:
+            vl = VocabList.from_dict(item)
+            existing = self.builders.get(vl.id)
+            if existing is not None:
+                existing.enter_threshold = vl.enter_threshold
+                existing.exit_threshold = vl.exit_threshold
+                existing.score_tau = vl.score_tau
+                existing.min_hold_sec = vl.min_hold_sec
+                existing.weight_min = vl.weight_min
+                existing.weight_max = vl.weight_max
+                existing.weight_step = vl.weight_step
+                existing.max_tags = vl.max_tags
+                new_builders[vl.id] = existing
+            else:
+                new_builders[vl.id] = PromptBuilder(
+                    base_prompt="",
+                    enter_threshold=vl.enter_threshold,
+                    exit_threshold=vl.exit_threshold,
+                    score_tau=vl.score_tau,
+                    min_hold_sec=vl.min_hold_sec,
+                    weight_min=vl.weight_min,
+                    weight_max=vl.weight_max,
+                    weight_step=vl.weight_step,
+                    max_tags=vl.max_tags,
+                    prompt_blacklist=self.prompt_blacklist,
+                    prompt_blacklist_mode=self.prompt_blacklist_mode,
+                    prompt_blacklist_whole_words=self.prompt_blacklist_whole_words,
+                )
+        self.builders = new_builders
+
+    def compose_now(self) -> str:
+        composed = self._compose()
+        self._last_composed = composed
+        return composed
+
+    def update(
+        self,
+        channel_results: Dict[str, List[Tuple[str, float]]],
+        now: float,
+        channel_dt: Dict[str, float],
+        *,
+        scored_ids: Optional[Iterable[str]] = None,
+    ) -> Optional[str]:
+        """Fold in scores for ``scored_ids`` only; other channels are left unchanged."""
+        ids = list(scored_ids if scored_ids is not None else channel_results.keys())
+        for vocab_id in ids:
+            builder = self.builders.get(vocab_id)
+            if builder is None:
+                continue
+            builder.update(
+                channel_results.get(vocab_id, []),
+                now,
+                channel_dt.get(vocab_id, 0.0),
+            )
+        composed = self._compose()
+        if composed == self._last_composed:
+            return None
+        self._last_composed = composed
+        return composed
+
+    def _compose(self) -> str:
+        parts: List[str] = []
+        if self.base_prompt:
+            parts.append(self.base_prompt)
+        for vocab_id in self.channel_order:
+            builder = self.builders.get(vocab_id)
+            if builder is None:
+                continue
+            parts.extend(builder.weighted_tag_parts())
+        if not parts:
+            return self.base_prompt
+        if len(parts) == 1:
+            return parts[0]
+        return ", ".join(parts)
+
+    def active_tags(self) -> List[str]:
+        tags: List[str] = []
+        for vocab_id in self.channel_order:
+            builder = self.builders.get(vocab_id)
+            if builder is not None:
+                tags.extend(builder.active_tags())
+        return tags
+
+    def active_tag_details(self) -> List[TagDetail]:
+        details: List[TagDetail] = []
+        for vocab_id in self.channel_order:
+            builder = self.builders.get(vocab_id)
+            if builder is not None:
+                details.extend(builder.active_tag_details())
+        return details
+
+    def channel_active_tags(self, vocab_id: str) -> List[str]:
+        builder = self.builders.get(vocab_id)
+        return builder.active_tags() if builder is not None else []
+
+    def channel_active_details(self, vocab_id: str) -> List[TagDetail]:
+        builder = self.builders.get(vocab_id)
+        return builder.active_tag_details() if builder is not None else []

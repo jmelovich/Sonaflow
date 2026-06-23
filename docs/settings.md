@@ -10,6 +10,8 @@ The visualizer loads defaults from `visualizer_settings.json` in the repo root (
 | `engine_dir` | `null` | TensorRT engines under `engines/{width}x{height}` in repo root, or `%LOCALAPPDATA%\Sonaflow\engines` when packaged |
 | `qwen_python` | `null` | Main `.venv` or packaged `runtime/main-env/python.exe` (override only) |
 | `rtx_video_sdk_path` | `null` | Falls back to `$NV_RTX_VIDEO_SDK` |
+| `clap_vocabs_dir` | `null` | CLAP vocabulary lists under `clap_vocabs/` in the data dir; see [`clap_vocab_lists.md`](./clap_vocab_lists.md) |
+| `react_routes_path` | `null` | Audio routing matrix JSON; see [`audio_routing.md`](./audio_routing.md) |
 
 ## Profiles (applied by setup.ps1)
 

@@ -30,7 +30,7 @@ from music_visualizer.bootstrap_paths import bootstrap_import_paths  # noqa: E40
 bootstrap_import_paths()
 
 from music_visualizer.config import Config  # noqa: E402
-from music_visualizer.ui.persistence import load_defaults_dict  # noqa: E402
+from music_visualizer.ui.persistence import load_defaults_dict, filter_config_dict  # noqa: E402
 from music_visualizer.ui.controller import RestartCoordinator, RuntimeContext  # noqa: E402
 from music_visualizer.utils.logging import get_logger, setup_logging  # noqa: E402
 from music_visualizer.utils.shared_state import PromptEmbeds, SharedPrompt  # noqa: E402
@@ -186,54 +186,6 @@ def build_config(argv: list[str] | None = None) -> Config:
     clap.add_argument(
         "--clap-window", dest="clap_window_sec", type=float, default=None,
         help="Audio window (s) scored each cycle. Smaller = less lag.",
-    )
-    clap.add_argument(
-        "--clap-interval", dest="clap_interval_sec", type=float, default=None,
-        help="Seconds between CLAP scorings (default 0.75).",
-    )
-    clap.add_argument("--clap-top-k", dest="clap_top_k", type=int, default=None)
-    clap.add_argument("--clap-max-tags", dest="clap_max_tags", type=int, default=None)
-    clap.add_argument(
-        "--clap-enter", dest="clap_enter_threshold", type=float, default=None,
-        help="Smoothed score to activate a tag (default 0.12).",
-    )
-    clap.add_argument(
-        "--clap-exit", dest="clap_exit_threshold", type=float, default=None,
-        help="Smoothed score below which a tag drops (default 0.06).",
-    )
-    clap.add_argument("--clap-score-tau", dest="clap_score_tau", type=float, default=None)
-    clap.add_argument("--clap-min-hold", dest="clap_min_hold_sec", type=float, default=None)
-    clap.add_argument("--clap-weight-min", dest="clap_weight_min", type=float, default=None)
-    clap.add_argument("--clap-weight-max", dest="clap_weight_max", type=float, default=None)
-    clap.add_argument(
-        "--clap-weight-step", dest="clap_weight_step", type=float, default=None,
-        help="Quantize tag weights to this step (default 0.1). Larger = fewer "
-             "prompt re-encodes / less stutter.",
-    )
-    clap.add_argument("--clap-softmax-temp", dest="clap_softmax_temp", type=float, default=None)
-    clap.add_argument(
-        "--no-clap-calibrate", dest="clap_calibrate", action="store_false", default=None,
-        help="Disable hubness calibration (rank on raw CLAP similarity). Tags "
-             "will bias toward the same few generic phrases.",
-    )
-    clap.add_argument(
-        "--clap-calib-alpha", dest="clap_calib_alpha", type=float, default=None,
-        help="EMA rate for the per-phrase baseline (default 0.0001; smaller=slower).",
-    )
-    clap.add_argument(
-        "--clap-calib-warmup", dest="clap_calib_warmup", type=int, default=None,
-        help="Cycles before trusting the calibration baseline (default 12).",
-    )
-    clap.add_argument(
-        "--clap-calib-spike-guard", dest="clap_calib_spike_guard", type=float, default=None,
-        help="Spike protection in cosine-sim units (default 0.05). Damps the "
-             "baseline's upward update for phrases spiking above their baseline "
-             "so a strong, unique match held for a long stretch isn't absorbed "
-             "and discarded. 0 = original symmetric calibration.",
-    )
-    clap.add_argument(
-        "--clap-vocab", dest="clap_vocab_path", default=None, metavar="JSON",
-        help="JSON array of phrases to override the built-in CLAP vocabulary.",
     )
 
     qwen = p.add_argument_group("qwen (Qwen2-Audio sidecar captioning)")
@@ -399,12 +351,7 @@ def build_config(argv: list[str] | None = None) -> Config:
         "beat_tempo_threshold", "beat_silence_db", "beat_bpm_smoothing",
         "react_zoom_gain", "react_beat_zoom", "react_beat_bass_scale", "react_zoom_max", "react_noise_gain",
         "react_rotate_gain", "react_beat_rotate", "react_pan_gain",
-        "clap_model_id", "clap_device", "clap_window_sec", "clap_interval_sec",
-        "clap_top_k", "clap_max_tags", "clap_enter_threshold",
-        "clap_exit_threshold", "clap_score_tau", "clap_min_hold_sec",
-        "clap_weight_min", "clap_weight_max", "clap_weight_step",
-        "clap_softmax_temp", "clap_calib_alpha", "clap_calib_warmup",
-        "clap_calib_spike_guard", "clap_vocab_path",
+        "clap_model_id", "clap_device", "clap_window_sec",
         "qwen_model_id", "qwen_python", "qwen_window_sec", "qwen_min_interval_sec",
         "qwen_instruction", "qwen_max_new_tokens", "qwen_timeout_sec", "qwen_port",
         "qwen_temperature", "qwen_top_p", "qwen_system_prompt", "qwen_blend_sec",
@@ -428,8 +375,6 @@ def build_config(argv: list[str] | None = None) -> Config:
         overrides["clap"] = args.clap
     if args.beat_grid_lock is not None:
         overrides["beat_grid_lock"] = args.beat_grid_lock
-    if args.clap_calibrate is not None:
-        overrides["clap_calibrate"] = args.clap_calibrate
     if args.qwen is not None:
         overrides["qwen"] = args.qwen
     if args.qwen_4bit is not None:
@@ -455,7 +400,7 @@ def build_config(argv: list[str] | None = None) -> Config:
         overrides["show_overlay"] = args.show_overlay
 
     defaults = load_defaults_dict()
-    merged = {**defaults, **overrides}
+    merged = filter_config_dict({**defaults, **overrides})
     return Config(**merged)
 
 
@@ -1242,34 +1187,21 @@ def _start_clap(
     """Build the CLAP analyzer + prompt builder and start the orchestrator."""
     from music_visualizer.analysis.clap_analyzer import CLAPAnalyzer
     from music_visualizer.analysis.orchestrator import PromptOrchestrator
-    from music_visualizer.analysis.prompt_builder import PromptBuilder
-    from music_visualizer.analysis.vocabulary import load_vocab
+    from music_visualizer.analysis.prompt_builder import MultiPromptBuilder
 
-    vocab = load_vocab(cfg.clap_vocab_path)
+    lists = cfg.clap_vocab_lists or []
     analyzer = CLAPAnalyzer(
-        vocabulary=vocab,
+        channels=lists,
         model_id=cfg.clap_model_id,
         device=cfg.clap_device,
-        softmax_temp=cfg.clap_softmax_temp,
-        calibrate=cfg.clap_calibrate,
-        calib_alpha=cfg.clap_calib_alpha,
-        calib_warmup=cfg.clap_calib_warmup,
-        calib_spike_guard=cfg.clap_calib_spike_guard,
     )
-    builder = PromptBuilder(
+    builder = MultiPromptBuilder(
         base_prompt=cfg.prompt,
-        enter_threshold=cfg.clap_enter_threshold,
-        exit_threshold=cfg.clap_exit_threshold,
-        score_tau=cfg.clap_score_tau,
-        min_hold_sec=cfg.clap_min_hold_sec,
-        weight_min=cfg.clap_weight_min,
-        weight_max=cfg.clap_weight_max,
-        weight_step=cfg.clap_weight_step,
-        max_tags=cfg.clap_max_tags,
         prompt_blacklist=cfg.prompt_blacklist,
         prompt_blacklist_mode=cfg.prompt_blacklist_mode,
         prompt_blacklist_whole_words=cfg.prompt_blacklist_whole_words,
     )
+    builder.sync_from_lists(lists)
     orchestrator = PromptOrchestrator(
         cfg, analyzer, builder, audio_ring, base_prompt, active_prompt, shutdown,
         embeds_slot=embeds_slot,

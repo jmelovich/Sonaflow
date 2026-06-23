@@ -36,6 +36,7 @@ IMGUI_SOURCES = [
 
 # Exported by the settings UI; used to detect pre-ImGui bridge builds.
 _UI_PROBE_SYMBOL = "glpresent_ui_set_params"
+_UI_GROUP_COLLAPSE_SYMBOL = "glpresent_ui_set_group_collapsed"
 
 
 def _cuda_root() -> Path:
@@ -63,7 +64,7 @@ def _dll_missing_ui_exports(path: Optional[Path] = None) -> bool:
         lib = ctypes.CDLL(str(dll))
     except OSError:
         return True
-    return not hasattr(lib, _UI_PROBE_SYMBOL)
+    return not hasattr(lib, _UI_PROBE_SYMBOL) or not hasattr(lib, _UI_GROUP_COLLAPSE_SYMBOL)
 
 
 def _needs_rebuild() -> bool:
