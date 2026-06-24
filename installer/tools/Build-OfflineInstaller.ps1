@@ -14,6 +14,12 @@
 
 
 
+    Requires NV_RTX_VIDEO_SDK on the build machine (RTX Video SDK with
+
+    include/nvsdk_ngx.h) so nvngx_vsr.dll can be bundled for end-user upscaling.
+
+
+
     Use -Cuda to target a GPU profile without changing your dev .venv:
 
       cu128  -> harvests .venv (default dev env)
@@ -127,6 +133,30 @@ Write-Step "CUDA profile: $Cuda (package venv: $(Get-PackageVenvRelName -Cuda $C
 Write-Ok "Stage target: $StageDir"
 
 Write-Ok "Output: $($paths.OutputBaseName).exe (+ .bin if >4 GB)"
+
+
+
+function Test-FullRtxVideoSdkRoot {
+    param([string]$Root)
+    if (-not $Root) { return $false }
+    return Test-Path (Join-Path $Root "include\nvsdk_ngx.h")
+}
+
+Write-Step "Preflight: RTX Video SDK (required to bundle VSR upscaling)"
+if (-not (Test-FullRtxVideoSdkRoot $env:NV_RTX_VIDEO_SDK)) {
+    throw @"
+NV_RTX_VIDEO_SDK is not set or does not point at a valid RTX Video SDK install.
+
+Download and extract the SDK from:
+  https://developer.nvidia.com/rtx-video-sdk
+
+Then set (User environment variable recommended):
+  NV_RTX_VIDEO_SDK=C:\RTX-Video-SDK
+
+Current value: $(if ($env:NV_RTX_VIDEO_SDK) { $env:NV_RTX_VIDEO_SDK } else { '(not set)' })
+"@
+}
+Write-Ok "NV_RTX_VIDEO_SDK=$($env:NV_RTX_VIDEO_SDK)"
 
 
 

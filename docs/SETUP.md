@@ -166,7 +166,8 @@ First TensorRT run builds engines (~5–15 min), cached under `engines/` in the 
 | HF model download fails (WinError 1314) | Re-run `.\setup.ps1` — setup pre-probes symlink support before parallel downloads; or enable Windows Developer Mode |
 | `cudaGL.h` / CUDA toolkit missing | Install [CUDA 12.8](https://developer.nvidia.com/cuda-12-8-0-download-archive) (cu128) or [CUDA 12.1](https://developer.nvidia.com/cuda-12-1-0-download-archive) (cu121); or pass `--no-gl-present` |
 | MSVC / `cl.exe` not found | Minimal install (~2 GB): [vs_BuildTools.exe](https://aka.ms/vs/17/release/vs_BuildTools.exe) + **MSVC v143 x64/x86 build tools** + **Windows 11 SDK** (Individual components); or pass `--no-gl-present` / `--no-upscale` |
-| RTX upscale fails | Download [RTX Video SDK](https://developer.nvidia.com/rtx-video-sdk), set `NV_RTX_VIDEO_SDK`, or pass `--no-upscale` |
+| RTX upscale fails (dev checkout) | Download [RTX Video SDK](https://developer.nvidia.com/rtx-video-sdk), set `NV_RTX_VIDEO_SDK`, or pass `--no-upscale` |
+| RTX upscale fails (packaged install) | Update NVIDIA driver; reinstall if `thirdparty\rtx-video-sdk` is missing; or pass `--no-upscale` |
 
 ### Stale TensorRT engines
 
@@ -174,6 +175,13 @@ Engines are tied to `width×height` and GPU architecture. Delete stale engines u
 `engines/` (or `%LOCALAPPDATA%\Sonaflow\engines`) if you see dimension mismatch errors.
 
 ## Building an installer
+
+Build machine prerequisites (in addition to dev setup):
+
+1. [RTX Video SDK](https://developer.nvidia.com/rtx-video-sdk) installed; set `NV_RTX_VIDEO_SDK` to the SDK root.
+2. MSVC + CUDA toolkit (for native bridge DLLs).
+
+Packaged installs bundle `nvngx_vsr.dll` automatically; end users do not need the SDK.
 
 ```powershell
 cd installer\tools

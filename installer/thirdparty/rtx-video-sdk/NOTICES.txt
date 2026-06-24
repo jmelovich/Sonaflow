@@ -1,0 +1,16 @@
+NVIDIA RTX Video SDK — Third-Party Notice
+==========================================
+
+Sonaflow includes runtime components from the NVIDIA RTX Video SDK for
+real-time RTX Video Super Resolution (VSR) upscaling.
+
+The following file is proprietary software owned by NVIDIA Corporation:
+  - nvngx_vsr.dll
+
+These components are subject to the NVIDIA RTX SDK / NGX End User License
+Agreement. By using Sonaflow's upscaling feature you agree to those terms.
+
+  RTX Video SDK: https://developer.nvidia.com/rtx-video-sdk
+  NGX EULA:      https://docs.nvidia.com/ngx/latest/ngx-eula/index.html
+
+This software contains components provided by NVIDIA Corporation.

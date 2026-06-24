@@ -26,6 +26,7 @@ installer/
 - A working dev setup: `..\setup.ps1 -Profile Full` so `.venv` includes Qwen deps.
 - Visual Studio Build Tools with **Desktop development with C++** (to compile the
   launcher; same toolchain the native DLLs use).
+- **RTX Video SDK** installed and `NV_RTX_VIDEO_SDK` set (bundles `nvngx_vsr.dll` for end-user upscaling).
 - Internet access (downloads a ~30 MB standalone CPython once).
 
 > The frozen runtime is **GPU/arch-specific** (RTX 50 / cu128 for v1). Build it on
@@ -120,7 +121,8 @@ Output: `installer\build\dist\Sonaflow-Setup-<ver>-offline\` (or `...\Sonaflow-S
 
 1. **Prereqs** — warns if `nvidia-smi` is missing; RTX-50 notice for other GPUs.
 2. **Resolution page** — snaps to generation size (same logic as `utils/resolution.py`).
-3. **Installs** — app (including vendored `streamdiffusion`) + frozen main-env + native DLLs →
+3. **Installs** — app (including vendored `streamdiffusion`) + frozen main-env + native DLLs +
+   bundled RTX VSR runtime (`thirdparty/rtx-video-sdk/`) →
    `%LOCALAPPDATA%\Programs\Sonaflow`.
 4. **Settings** — writes `visualizer_settings.json` with generation size snapped from
    your display resolution; optional Qwen component sets `qwen=true`.

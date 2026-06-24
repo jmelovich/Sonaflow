@@ -47,7 +47,11 @@ Freeze both Python environments, prebuild native DLLs, pre-bundle the small mode
 │   └── main-env\python.exe + Lib\site-packages\   # torch, streamdiffusion, TensorRT, Qwen deps, ...
 ├── native\
 │   ├── glpresent_bridge.dll
-│   └── rtxvsr_bridge.dll                     # only meaningful if user supplies RTX Video SDK
+│   └── rtxvsr_bridge.dll
+├── thirdparty\
+│   └── rtx-video-sdk\
+│       ├── bin\Windows\x64\rel\nvngx_vsr.dll   # bundled at build time (not in git)
+│       └── NOTICES.txt                         # NVIDIA attribution
 ├── redist\VC_redist.x64.exe                  # installed if missing
 └── unins000.exe
 
@@ -240,7 +244,7 @@ The distributed `Sonaflow-Setup.exe` is small (just the bootstrapper). At runtim
 - **Payload size / download UX**: core likely ~6–10 GB; need resumable, verified downloads and clear progress.
 - **Driver/TRT version drift**: a downloaded engine built against TRT X may fail on a user with a much newer/older driver — runtime rebuild fallback is mandatory.
 - **SmartScreen**: unsigned installer will be flagged; budget for a code-signing cert.
-- **RTX Video SDK** (upscaling) remains user-supplied (license-gated, non-redistributable) — `rtxvsr_bridge.dll` ships but upscale stays off until the user provides the SDK.
+- **RTX VSR bundling**: `nvngx_vsr.dll` is copied from the build machine's RTX Video SDK install into `thirdparty/rtx-video-sdk/`; include `NOTICES.txt` and comply with NVIDIA NGX EULA attribution. End users need only a recent driver + RTX GPU.
 
 ---
 

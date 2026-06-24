@@ -10,6 +10,7 @@ built on your exact GPU.
 ALREADY HANDLED BY THIS INSTALLER
 ---------------------------------
   • Sonaflow application + frozen Python runtime (includes Qwen Python deps)
+  • RTX VSR upscaling runtime (nvngx_vsr.dll bundled under thirdparty\rtx-video-sdk\)
   • Generation resolution matched to your display (written to settings)
   • Start Menu shortcut and uninstaller
   • Visual C++ runtime (installed automatically if missing)
@@ -56,32 +57,21 @@ NVIDIA GPU DRIVER (REQUIRED — NOT BUNDLED)
   work with reduced features or require an on-device engine rebuild.
 
 
-RTX VIDEO SDK — 4K UPSCALING (OPTIONAL — NOT BUNDLED)
------------------------------------------------------
-  Real-time upscaling (RTX VSR) requires the NVIDIA RTX Video SDK, which cannot
-  be redistributed inside this installer (license acceptance required).
+RTX VSR UPSCALING (BUNDLED — DRIVER REQUIRED)
+----------------------------------------------
+  Real-time upscaling (RTX Video Super Resolution) is included in this install.
+  No separate SDK download or NV_RTX_VIDEO_SDK environment variable is needed.
 
-  1. Download the SDK:
-     https://developer.nvidia.com/rtx-video-sdk
+  Requirements:
+  • NVIDIA RTX GPU
+  • Recent NVIDIA driver (R570.20+ recommended for RTX 50-series)
 
-  2. Accept the license and install/extract to a folder, e.g.:
-     C:\RTX-Video-SDK
+  Upscaling is enabled by default. Disable with:  Sonaflow.exe --no-upscale
 
-  3. Set a user environment variable (System Properties → Environment Variables):
+  Third-party notice:  %LOCALAPPDATA%\Programs\Sonaflow\thirdparty\rtx-video-sdk\NOTICES.txt
 
-     Variable name:  NV_RTX_VIDEO_SDK
-     Variable value: C:\RTX-Video-SDK
-
-     Or in PowerShell (persists for your user account):
-
-     [Environment]::SetEnvironmentVariable(
-       "NV_RTX_VIDEO_SDK", "C:\RTX-Video-SDK", "User")
-
-  4. Restart Sonaflow. Upscaling is enabled by default in Full-profile settings;
-     disable with --no-upscale if you do not install the SDK.
-
-  Without the SDK, Sonaflow still runs at the configured generation resolution;
-  only the RTX upscaling step is skipped.
+  If upscaling fails at runtime, Sonaflow still runs at the configured generation
+  resolution; only the RTX upscaling step is skipped.
 
 
 QWEN2-AUDIO CAPTIONS (OPTIONAL — MODEL DOWNLOADED ONLINE)

@@ -13,4 +13,5 @@ installer/build/payloads/
 installer/dist/
 installer/generated/
 installer/redist/
+installer/thirdparty/rtx-video-sdk/bin/
 __pycache__/

@@ -10,7 +10,8 @@
         app\music_visualizer\...          (this repo's package)
         app\streamdiffusion\...           (vendored StreamDiffusion package)
         runtime\main-env\...              (frozen env from Freeze-Env.ps1)
-        native\*.dll                      (prebuilt bridges, if present)
+        native\*.dll                      (prebuilt bridges)
+        thirdparty\rtx-video-sdk\...    (bundled nvngx_vsr.dll)
 
     Mutable data (settings, models, engines) is created at runtime under
     %LOCALAPPDATA%\Sonaflow by the launcher; nothing is written into the stage.
@@ -60,7 +61,37 @@ Write-Step "Staging frozen runtime\main-env"
 Copy-Tree -Src $FrozenMainEnv -Dst (Join-Path $StageDir "runtime\main-env")
 Write-Ok "runtime\main-env"
 
-Write-Step "Staging native bridges (if built)"
+function Get-BuildPython {
+    param([string]$Root, [string]$FrozenEnv)
+    foreach ($rel in @(".venv\Scripts\python.exe", ".venv-cu121\Scripts\python.exe")) {
+        $candidate = Join-Path $Root $rel
+        if (Test-Path $candidate) { return $candidate }
+    }
+    $frozenPy = Join-Path $FrozenEnv "python.exe"
+    if (Test-Path $frozenPy) { return $frozenPy }
+    throw "No Python interpreter found for native bridge builds (need .venv or frozen runtime)."
+}
+
+Write-Step "Building rtxvsr_bridge.dll (required for packaged upscaling)"
+$buildPy = Get-BuildPython -Root $ProjectRoot -FrozenEnv $FrozenMainEnv
+$buildScript = Join-Path $ProjectRoot "music_visualizer\generation\native\build_rtxvsr.py"
+$prevPyPath = $env:PYTHONPATH
+$env:PYTHONPATH = $ProjectRoot
+try {
+    Push-Location $ProjectRoot
+    & $buildPy $buildScript
+    if ($LASTEXITCODE -ne 0) {
+        throw "rtxvsr_bridge.dll build failed (exit $LASTEXITCODE). Ensure NV_RTX_VIDEO_SDK, MSVC, and CUDA toolkit are installed."
+    }
+}
+finally {
+    Pop-Location
+    if ($null -ne $prevPyPath) { $env:PYTHONPATH = $prevPyPath }
+    else { Remove-Item Env:PYTHONPATH -ErrorAction SilentlyContinue }
+}
+Write-Ok "rtxvsr_bridge.dll built"
+
+Write-Step "Staging native bridges"
 $nativeDst = Join-Path $StageDir "native"
 New-Item -ItemType Directory -Force -Path $nativeDst | Out-Null
 $dllSources = @(
@@ -77,7 +108,15 @@ foreach ($srcDir in $dllSources) {
     }
 }
 if ($copied -gt 0) { Write-Ok "$copied native DLL(s) staged" }
-else { Write-Warn2 "No prebuilt DLLs found (OpenCV fallback / first-run build will apply)" }
+else { Write-Warn2 "No native DLLs staged besides rtxvsr (OpenCV / first-run build may apply for others)" }
+
+$stagedRtxVsr = Join-Path $nativeDst "rtxvsr_bridge.dll"
+if (-not (Test-Path $stagedRtxVsr)) {
+    throw "rtxvsr_bridge.dll missing from stage at $stagedRtxVsr"
+}
+
+Write-Step "Staging bundled RTX VSR runtime"
+& (Join-Path $PSScriptRoot "Stage-RtxVsr.ps1") -StageDir $StageDir
 
 if (-not $SkipLauncher) {
     Write-Step "Building launcher into stage root"

@@ -307,7 +307,9 @@ class Config:
         return int(w), int(h)
 
     def resolved_rtx_sdk_path(self) -> Optional[str]:
-        return self.rtx_video_sdk_path or os.environ.get("NV_RTX_VIDEO_SDK")
+        from music_visualizer.utils.rtx_video_sdk import resolve_rtx_sdk_path
+
+        return resolve_rtx_sdk_path(self.rtx_video_sdk_path)
 
     def resolved_qwen_python(self) -> str:
         """Path to the Python interpreter used for the Qwen sidecar subprocess."""

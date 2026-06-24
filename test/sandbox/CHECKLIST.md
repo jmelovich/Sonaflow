@@ -117,4 +117,4 @@ Closing the sandbox discards all state. Re-run from step 1 to regression-test af
 - `<vGPU>Enable</vGPU>` passes through the host GPU; TensorRT engine builds are still **GPU-specific**.
 - Mapped folder is **read-only**; always work in `C:\test` after the copy step.
 - Network access inside the sandbox is required for `git clone`, `poetry install`, and HuggingFace downloads.
-- RTX Video SDK cannot be redistributed; upscale tests require manual SDK install on the host and `NV_RTX_VIDEO_SDK` visible in the sandbox session.
+- RTX VSR upscaling is bundled in packaged installs (`thirdparty/rtx-video-sdk/`). Dev/sandbox upscale tests still require `NV_RTX_VIDEO_SDK` on the host when running from a git checkout.
