@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
+from pathlib import Path
 from typing import Any, Dict, Optional
 
 from music_visualizer.config import Config
@@ -92,6 +93,20 @@ class TkSettingsPanel:
             self._root.withdraw()
         self._visible = False
 
+    def _set_icon(self, window: tk.Toplevel) -> None:
+        # Walk up from this file to the project root to find resources/.
+        # Works both in the dev tree and in the packaged install layout.
+        icon_candidates = [
+            Path(__file__).resolve().parent.parent.parent / "resources" / "SonaflowIcon1.ico",
+        ]
+        for path in icon_candidates:
+            if path.exists():
+                try:
+                    window.iconbitmap(str(path))
+                except Exception:
+                    pass
+                return
+
     def _build(self) -> None:
         cfg = self._controller._ctx.cfg
         root = tk.Toplevel()
@@ -99,6 +114,7 @@ class TkSettingsPanel:
         root.geometry("560x720")
         root.attributes("-alpha", 0.92)
         root.protocol("WM_DELETE_WINDOW", self.hide)
+        self._set_icon(root)
 
         bar = ttk.Frame(root)
         bar.pack(fill=tk.X, padx=6, pady=4)

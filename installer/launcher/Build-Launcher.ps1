@@ -37,7 +37,8 @@ $exe = Join-Path $OutDir $Name
 $obj = Join-Path $env:TEMP ("launcher-" + [guid]::NewGuid().ToString("N") + ".obj")
 
 $rc = ""
-$icon = Join-Path $PSScriptRoot "icon.ico"
+$repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
+$icon = Join-Path $repoRoot "resources\SonaflowIcon1.ico"
 $rcFile = Join-Path $PSScriptRoot "launcher.rc"
 if ((Test-Path $icon) -and (Test-Path $rcFile)) {
     $res = Join-Path $env:TEMP ("launcher-" + [guid]::NewGuid().ToString("N") + ".res")

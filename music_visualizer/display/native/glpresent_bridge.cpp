@@ -782,8 +782,31 @@ LRESULT CALLBACK wnd_proc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
     return DefWindowProcW(hwnd, msg, wp, lp);
 }
 
+// Path to the .ico file; set by glpresent_set_icon_path() before glpresent_init().
+static wchar_t g_icon_path[MAX_PATH] = {};
+
+// Load the application icon.
+// 1. If an .ico path was provided via glpresent_set_icon_path, load from file.
+// 2. Otherwise fall back to resource ID 1 embedded in the process exe
+//    (the packaged Sonaflow.exe embeds the icon via launcher.rc).
+// desired_w/h == 0 means system default size.
+static HICON load_app_icon(int desired_w, int desired_h) {
+    UINT flags = (desired_w == 0) ? LR_DEFAULTSIZE : 0;
+    if (g_icon_path[0]) {
+        HICON h = (HICON)LoadImageW(nullptr, g_icon_path, IMAGE_ICON,
+                                    desired_w, desired_h, LR_LOADFROMFILE | flags);
+        if (h) return h;
+    }
+    // Packaged build: icon is embedded in Sonaflow.exe as resource ID 1.
+    return (HICON)LoadImageW(GetModuleHandleW(nullptr), MAKEINTRESOURCEW(1),
+                             IMAGE_ICON, desired_w, desired_h, flags);
+}
+
 bool create_window(const wchar_t* title, int w, int h) {
     g_hinst = GetModuleHandleW(nullptr);
+
+    HICON hIconLg = load_app_icon(0, 0);
+    HICON hIconSm = load_app_icon(16, 16);
 
     WNDCLASSEXW wc{};
     wc.cbSize = sizeof(wc);
@@ -791,6 +814,8 @@ bool create_window(const wchar_t* title, int w, int h) {
     wc.lpfnWndProc = wnd_proc;
     wc.hInstance = g_hinst;
     wc.hCursor = LoadCursor(nullptr, IDC_ARROW);
+    wc.hIcon   = hIconLg;
+    wc.hIconSm = hIconSm;
     wc.lpszClassName = kClassName;
     g_class = RegisterClassExW(&wc);
     if (!g_class) {
@@ -811,6 +836,11 @@ bool create_window(const wchar_t* title, int w, int h) {
         set_error("CreateWindowExW failed (err %lu)", GetLastError());
         return false;
     }
+
+    // Explicitly push the icon onto the window in case the class registration
+    // race or a pre-existing class registration left a stale icon.
+    if (hIconLg) SendMessage(g_hwnd, WM_SETICON, ICON_BIG,   (LPARAM)hIconLg);
+    if (hIconSm) SendMessage(g_hwnd, WM_SETICON, ICON_SMALL, (LPARAM)hIconSm);
 
     g_hdc = GetDC(g_hwnd);
 
@@ -938,6 +968,15 @@ void draw_quad() {
 
 EXPORT const char* glpresent_last_error() {
     return g_error;
+}
+
+// Set the path to the application .ico file before calling glpresent_init().
+// Python passes the resolved path so the DLL doesn't have to guess it.
+EXPORT void glpresent_set_icon_path(const wchar_t* path) {
+    if (path && path[0])
+        wcscpy_s(g_icon_path, MAX_PATH, path);
+    else
+        g_icon_path[0] = L'\0';
 }
 
 EXPORT int glpresent_init(const wchar_t* title, int tex_w, int tex_h, int gpu) {

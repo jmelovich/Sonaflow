@@ -37,6 +37,7 @@ ArchitecturesInstallIn64BitMode=x64compatible
 MinVersion=10.0
 OutputBaseFilename=Sonaflow-Setup-{#AppVersion}{#CudaSuffix}-offline
 OutputDir=build\dist\Sonaflow-Setup-{#AppVersion}{#CudaSuffix}-offline
+SetupIconFile=..\resources\SonaflowIcon1.ico
 WizardStyle=modern
 DiskSpanning=yes
 Compression=none

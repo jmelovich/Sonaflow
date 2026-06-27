@@ -40,6 +40,27 @@ logger = get_logger(__name__)
 _NATIVE_DIR = Path(__file__).resolve().parent / "native"
 _DLL_PATH = _NATIVE_DIR / "glpresent_bridge.dll"
 
+# Resolve the app icon once at import time; works in both the dev tree and the
+# packaged layout where resources/ sits one level above the app/ directory.
+_ICON_PATH: Optional[Path] = None
+for _p in [
+    Path(__file__).resolve().parent.parent.parent / "resources" / "SonaflowIcon1.ico",
+    Path(__file__).resolve().parent.parent.parent.parent / "resources" / "SonaflowIcon1.ico",
+]:
+    if _p.exists():
+        _ICON_PATH = _p
+        break
+
+
+def _set_process_app_id() -> None:
+    """Give this process its own AUMID so Windows assigns it a dedicated taskbar
+    button with Sonaflow's icon instead of inheriting the python.exe button."""
+    try:
+        import ctypes
+        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("Sonaflow.Sonaflow")
+    except Exception:
+        pass
+
 # Overlay layout tuned for ~512-1080p; scaled up when the window shrinks a large
 # frame so text stays readable (mirrors the OpenCV renderer's metrics).
 _OVERLAY_FONT = 0.55
@@ -90,6 +111,11 @@ class GLPresenter:
         torch.cuda.init()
         torch.zeros(1, device=self._device)
 
+        _set_process_app_id()
+
+        if _ICON_PATH is not None:
+            self._lib.glpresent_set_icon_path(str(_ICON_PATH))
+
         title = config.window_title
         ok = self._lib.glpresent_init(title, self.tex_w, self.tex_h, int(device))
         if not ok:
@@ -122,6 +148,8 @@ class GLPresenter:
 
     def _bind_signatures(self) -> None:
         lib = self._lib
+        lib.glpresent_set_icon_path.argtypes = [ctypes.c_wchar_p]
+        lib.glpresent_set_icon_path.restype = None
         lib.glpresent_init.argtypes = [
             ctypes.c_wchar_p, ctypes.c_int, ctypes.c_int, ctypes.c_int,
         ]

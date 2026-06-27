@@ -1,0 +1,9 @@
+// Resource script for Sonaflow.exe
+// Embeds the application icon so Windows shows it in Explorer,
+// the taskbar, and the title-bar of every child window that loads
+// the icon from the process via LoadIcon(GetModuleHandle(NULL), ...).
+
+#include <windows.h>
+
+// Resource ID 1 is the conventional "main application icon".
+1 ICON "..\\..\\resources\\SonaflowIcon1.ico"

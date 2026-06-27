@@ -4,7 +4,7 @@
     "Audio": true,
     "Audio Reactive": true,
     "Audio Routes": true,
-    "Beat Detection": true,
+    "Beat Detection": false,
     "CLAP": true,
     "CLAP \u2014 Imagery": true,
     "CLAP \u2014 Imagery (tuning)": true,
@@ -12,14 +12,14 @@
     "CLAP \u2014 Mood (tuning)": true,
     "CLAP \u2014 Style": true,
     "CLAP \u2014 Style (tuning)": true,
-    "Content Centering": false,
-    "Display": false,
+    "Content Centering": true,
+    "Display": true,
     "Feedback Motion": true,
     "Generation": true,
     "Integration": true,
-    "Prompt": false,
-    "Qwen": false,
-    "Runtime": false,
+    "Prompt": true,
+    "Qwen": true,
+    "Runtime": true,
     "Upscaling": true
   }
 }

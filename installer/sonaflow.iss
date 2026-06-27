@@ -37,6 +37,7 @@ ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 MinVersion=10.0
 OutputBaseFilename=Sonaflow-Setup-{#AppVersion}
+SetupIconFile=..\resources\SonaflowIcon1.ico
 WizardStyle=modern
 Compression=lzma2/max
 SolidCompression=yes
