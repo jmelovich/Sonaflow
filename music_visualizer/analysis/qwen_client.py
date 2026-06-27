@@ -23,8 +23,7 @@ from music_visualizer.utils.shared_state import AudioRing, PromptBlendState, Sha
 from music_visualizer.utils.text import (
     english_only_text,
     filter_composed_addition,
-    filter_prompt_addition,
-    normalize_blacklist_mode,
+    filter_prompt_addition_detailed,
 )
 
 logger = get_logger(__name__)
@@ -305,7 +304,6 @@ class QwenOrchestrator:
     def sync_blacklist_from_config(self, cfg: Config) -> None:
         """Re-filter cached captions after live blacklist edits."""
         self.config = cfg
-        mode = normalize_blacklist_mode(cfg.prompt_blacklist_mode)
         with self._lock:
             pending = self._pending_caption
             last = self._last_caption
@@ -318,13 +316,13 @@ class QwenOrchestrator:
                 else:
                     self._pending_caption = filtered
         if last:
-            filtered = self._filter_caption(last)
+            result = self._filter_caption_detailed(last)
             with self._lock:
-                if filtered is None:
-                    if mode != "discard":
+                if result.text is None:
+                    if result.outcome != "discard":
                         self._last_caption = ""
                 else:
-                    self._last_caption = filtered
+                    self._last_caption = result.text
 
     def _compose(self, caption: str) -> str:
         caption = caption.strip()
@@ -375,31 +373,37 @@ class QwenOrchestrator:
         cosine = float(np.dot(potential_embed.numpy(), anchor_embed.numpy()))
         return cosine, self._hold_score(cosine, hold_sim_power)
 
+    def _blacklist_kwargs(self) -> dict:
+        return {
+            "strip_blacklist": self.config.prompt_blacklist_strip,
+            "discard_blacklist": self.config.prompt_blacklist_discard,
+            "order": self.config.prompt_blacklist_order,
+            "whole_words": self.config.prompt_blacklist_whole_words,
+        }
+
     def _filter_caption(self, caption: str) -> Optional[str]:
+        return self._filter_caption_detailed(caption).text
+
+    def _filter_caption_detailed(self, caption: str):
         caption = (caption or "").strip()
         if not caption:
-            return ""
-        filtered = filter_prompt_addition(
-            caption,
-            self.config.prompt_blacklist,
-            self.config.prompt_blacklist_mode,
-            whole_words=self.config.prompt_blacklist_whole_words,
-        )
-        if filtered is None:
+            return filter_prompt_addition_detailed("", **self._blacklist_kwargs())
+        result = filter_prompt_addition_detailed(caption, **self._blacklist_kwargs())
+        if result.text is None:
             if caption:
                 logger.info(
                     "Qwen caption rejected by blacklist (%s): %s",
-                    self.config.prompt_blacklist_mode,
+                    result.outcome,
                     caption[:120],
                 )
-            return None
-        if filtered != caption:
+            return result
+        if result.text != caption:
             logger.debug(
                 "Qwen caption filtered: %s -> %s",
                 caption[:120],
-                filtered[:120],
+                result.text[:120],
             )
-        return filtered
+        return result
 
     def _prepare_composed(self, caption: str) -> Optional[str]:
         """Apply blacklist to a Qwen caption and merge with the exempt base prompt."""
@@ -409,14 +413,13 @@ class QwenOrchestrator:
         composed = filter_composed_addition(
             self._base.current(),
             caption,
-            self.config.prompt_blacklist,
-            self.config.prompt_blacklist_mode,
-            whole_words=self.config.prompt_blacklist_whole_words,
+            **self._blacklist_kwargs(),
         )
         if composed is None and caption:
+            result = filter_prompt_addition_detailed(caption, **self._blacklist_kwargs())
             logger.info(
                 "Qwen caption rejected by blacklist (%s): %s",
-                self.config.prompt_blacklist_mode,
+                result.outcome,
                 caption[:120],
             )
         return composed

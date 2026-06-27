@@ -3,21 +3,25 @@
 from __future__ import annotations
 
 import re
+from dataclasses import dataclass
 from typing import Literal, Optional, Sequence
 
 # SD prompts: ASCII letters, digits, whitespace, common punctuation only.
 _NON_ENGLISH = re.compile(r"[^a-zA-Z0-9\s,.'\"\-;:!?()&]+")
 _WHITESPACE = re.compile(r"\s+")
 
-PromptBlacklistMode = Literal["discard", "strip"]
+PromptBlacklistOrder = Literal["strip_first", "discard_first"]
+PromptFilterOutcome = Literal["ok", "discard", "empty"]
 
 
-def normalize_blacklist_mode(mode: PromptBlacklistMode | str | None) -> PromptBlacklistMode:
-    """Coerce UI/settings values to a known blacklist mode."""
-    value = str(mode or "strip").strip().lower()
-    if value == "discard":
-        return "discard"
-    return "strip"
+def normalize_blacklist_order(
+    order: PromptBlacklistOrder | str | None,
+) -> PromptBlacklistOrder:
+    """Coerce UI/settings values to a known blacklist application order."""
+    value = str(order or "strip_first").strip().lower()
+    if value == "discard_first":
+        return "discard_first"
+    return "strip_first"
 
 
 def english_only_text(text: str) -> str:
@@ -83,46 +87,95 @@ def strip_blacklist_terms(
     return result.strip(" ,")
 
 
-def apply_prompt_blacklist(
+@dataclass(frozen=True)
+class PromptFilterResult:
+    """Outcome of filtering an auto-generated prompt addition."""
+
+    text: Optional[str]
+    outcome: PromptFilterOutcome
+
+
+def apply_prompt_blacklists(
     prompt: str,
-    terms: Sequence[str],
-    mode: PromptBlacklistMode | str,
     *,
+    strip_terms: Sequence[str],
+    discard_terms: Sequence[str],
+    order: PromptBlacklistOrder | str = "strip_first",
     whole_words: bool = True,
-) -> Optional[str]:
+) -> PromptFilterResult:
     """Filter auto-generated prompt text (Qwen captions, CLAP tags).
 
-    Returns ``None`` when the addition should be rejected and the current prompt
-    kept. In ``strip`` mode, returns the cleaned text (possibly unchanged).
+    Returns a :class:`PromptFilterResult`. ``outcome`` is ``discard`` when the
+    discard list matched, ``empty`` when stripping removed all text, and ``ok``
+    otherwise. ``text`` is the filtered prompt or ``None`` when rejected/empty.
     """
-    mode = normalize_blacklist_mode(mode)
+    order = normalize_blacklist_order(order)
     prompt = (prompt or "").strip()
-    if not prompt or not terms:
-        return prompt
-    if mode == "discard":
-        if prompt_matches_blacklist(prompt, terms, whole_words=whole_words):
-            return None
-        return prompt
-    cleaned = strip_blacklist_terms(
-        prompt, terms, whole_words=whole_words
-    ).strip()
-    if not cleaned:
-        return None
-    return cleaned
+    if not prompt:
+        return PromptFilterResult(prompt, "ok")
+    if not strip_terms and not discard_terms:
+        return PromptFilterResult(prompt, "ok")
+
+    def discard_check(text: str) -> PromptFilterResult:
+        if discard_terms and prompt_matches_blacklist(
+            text, discard_terms, whole_words=whole_words
+        ):
+            return PromptFilterResult(None, "discard")
+        return PromptFilterResult(text, "ok")
+
+    def strip_apply(text: str) -> PromptFilterResult:
+        if not strip_terms:
+            return PromptFilterResult(text, "ok")
+        cleaned = strip_blacklist_terms(
+            text, strip_terms, whole_words=whole_words
+        ).strip()
+        if not cleaned:
+            return PromptFilterResult(None, "empty")
+        return PromptFilterResult(cleaned, "ok")
+
+    if order == "strip_first":
+        stripped = strip_apply(prompt)
+        if stripped.outcome != "ok":
+            return stripped
+        return discard_check(stripped.text or "")
+    discarded = discard_check(prompt)
+    if discarded.outcome != "ok":
+        return discarded
+    return strip_apply(discarded.text or "")
 
 
 def filter_prompt_addition(
     text: str,
-    blacklist: str,
-    mode: PromptBlacklistMode,
     *,
+    strip_blacklist: str = "",
+    discard_blacklist: str = "",
+    order: PromptBlacklistOrder | str = "strip_first",
     whole_words: bool = True,
 ) -> Optional[str]:
     """Apply blacklist settings to an auto-generated addition (not the base prompt)."""
-    return apply_prompt_blacklist(
+    return apply_prompt_blacklists(
         text,
-        parse_prompt_blacklist(blacklist),
-        mode,
+        strip_terms=parse_prompt_blacklist(strip_blacklist),
+        discard_terms=parse_prompt_blacklist(discard_blacklist),
+        order=order,
+        whole_words=whole_words,
+    ).text
+
+
+def filter_prompt_addition_detailed(
+    text: str,
+    *,
+    strip_blacklist: str = "",
+    discard_blacklist: str = "",
+    order: PromptBlacklistOrder | str = "strip_first",
+    whole_words: bool = True,
+) -> PromptFilterResult:
+    """Like :func:`filter_prompt_addition` but includes the rejection reason."""
+    return apply_prompt_blacklists(
+        text,
+        strip_terms=parse_prompt_blacklist(strip_blacklist),
+        discard_terms=parse_prompt_blacklist(discard_blacklist),
+        order=order,
         whole_words=whole_words,
     )
 
@@ -130,39 +183,48 @@ def filter_prompt_addition(
 def filter_composed_addition(
     base: str,
     addition: str,
-    blacklist: str,
-    mode: PromptBlacklistMode | str,
     *,
+    strip_blacklist: str = "",
+    discard_blacklist: str = "",
+    order: PromptBlacklistOrder | str = "strip_first",
     whole_words: bool = True,
 ) -> Optional[str]:
     """Filter ``addition`` and append to exempt ``base`` prompt text."""
-    mode = normalize_blacklist_mode(mode)
     base = (base or "").strip()
     addition = (addition or "").strip()
     if not addition:
         return base
-    filtered = filter_prompt_addition(
-        addition, blacklist, mode, whole_words=whole_words
+    result = filter_prompt_addition_detailed(
+        addition,
+        strip_blacklist=strip_blacklist,
+        discard_blacklist=discard_blacklist,
+        order=order,
+        whole_words=whole_words,
     )
-    if filtered is None:
-        if mode == "discard":
+    if result.text is None:
+        if result.outcome == "discard":
             # Reject the whole addition; caller keeps the current composed prompt.
             return None
-        # Strip mode: addition fully removed — fall back to the exempt base prompt.
+        # Strip list removed everything — fall back to the exempt base prompt.
         return base if base else None
     if not base:
-        return filtered
-    return f"{base}, {filtered}"
+        return result.text
+    return f"{base}, {result.text}"
 
 
 def filter_prompt_for_sd(
     prompt: str,
-    blacklist: str,
-    mode: PromptBlacklistMode,
     *,
+    strip_blacklist: str = "",
+    discard_blacklist: str = "",
+    order: PromptBlacklistOrder | str = "strip_first",
     whole_words: bool = True,
 ) -> Optional[str]:
     """Alias for :func:`filter_prompt_addition`."""
     return filter_prompt_addition(
-        prompt, blacklist, mode, whole_words=whole_words
+        prompt,
+        strip_blacklist=strip_blacklist,
+        discard_blacklist=discard_blacklist,
+        order=order,
+        whole_words=whole_words,
     )

@@ -95,7 +95,14 @@ class Config:
     audio_device: Optional[int] = None  # sounddevice device index (None = default)
     sample_rate: int = 44100            # used for live capture; file uses its own
     hop_size: int = 512                 # samples per analysis block (~12ms @ 44100)
-    fft_size: int = 1024                # aubio FFT window (>= hop_size)
+    fft_size: int = 1024                # aubio tempo/onset FFT window (>= hop_size)
+    # Spectral-analysis FFT window for band energies / centroid / rolloff /
+    # spread, DECOUPLED from fft_size. The tempo/onset trackers want the small
+    # fft_size for tight timing, but 1024 = ~43 Hz/bin is far too coarse for
+    # bass (a kick fundamental lands in 1-2 bins). A larger window here sharpens
+    # low-frequency features without hurting beat timing. Must be a power of two
+    # >= hop_size. 0 (or < hop_size) = use fft_size (legacy coupled behavior).
+    react_spectral_fft: int = 2048
     # Realtime device buffer (samples), DECOUPLED from hop_size. The output/input
     # callback uses this, not hop_size: a 512-sample buffer (~12ms) underruns the
     # instant a GPU/GIL stall exceeds it, producing gibberish noise once CLAP +
@@ -129,7 +136,17 @@ class Config:
     react_smoothing_tau: float = 0.12   # EMA time constant (s) for band/onset
     react_beat_decay_tau: float = 0.18  # beat impulse decay time constant (s)
     react_pan_orbit_rate: float = 0.6   # pan drift angular speed (rad/s)
-    react_norm_decay: float = 0.999     # rolling-peak decay for feature normalize
+    react_norm_decay: float = 0.999     # peak/ceiling release rate for normalize
+    # Adaptive feature normalization. The legacy normalizer tracks a decaying
+    # peak only, which (a) stays pinned high for seconds after one loud transient
+    # (later beats read weak) and (b) blows tiny signals up to full-scale during
+    # quiet passages (visualizer goes wild on near-silence). The adaptive mode
+    # maps a dB window below a tracked ceiling and gates true silence, so a
+    # single setting generalizes across loud and quiet tracks. False = legacy
+    # peak normalizer (uses react_norm_decay only).
+    react_adaptive_norm: bool = True
+    react_norm_range_db: float = 50.0   # dynamic-range window below the ceiling
+    react_norm_gate_db: float = -65.0   # ceiling below this dB => output 0 (silence)
     react_bpm_map_min: float = 60.0     # BPM mapped to 0 for bpm_mapped source
     react_bpm_map_max: float = 180.0    # BPM mapped to 1 for bpm_mapped source
     react_pan_max: float = 0.05         # hard cap on |pan_x|/|pan_y| per frame
@@ -149,6 +166,17 @@ class Config:
     beat_bpm_min: float = 60.0
     beat_bpm_max: float = 200.0
     beat_bpm_smoothing: float = 0.1     # EMA rate when aubio reports a beat
+    # Adaptive beat gating: confirm each aubio tempo beat against a rolling
+    # onset threshold (median + k*MAD of recent onset strength), rejecting
+    # "beats" that land on weak/steady content. Reduces false flashes on busy
+    # tracks without re-tuning beat_tempo_threshold per song. False = raw beats.
+    beat_adaptive_gate: bool = True
+    beat_gate_k: float = 0.6            # higher = stricter (fewer beats pass)
+    # Tempo octave correction: fold aubio's BPM into [octave_lo, 2*octave_lo) so
+    # a half/double-tempo estimate doesn't make BPM-driven motion jump octaves.
+    # False = use aubio's raw BPM.
+    beat_octave_correct: bool = True
+    beat_octave_lo: float = 90.0        # low edge of the preferred one-octave band
 
     # --- CLAP prompt injection (audio -> auto prompt tags) ---
     # A CLAP model scores short rolling audio windows against a vocabulary of
@@ -240,11 +268,13 @@ class Config:
     # --- Prompt ---
     prompt: str = ""
     negative_prompt: str = "low quality, blurry, distorted, watermark, text"
-    # Comma-separated words to block in Qwen captions and CLAP tags (not the
+    # Comma-separated words to strip from Qwen captions and CLAP tags (not the
     # manual base prompt). Case-insensitive whole-word match.
-    prompt_blacklist: str = ""
-    # "strip" removes matched substrings; "discard" rejects the whole prompt.
-    prompt_blacklist_mode: Literal["discard", "strip"] = "strip"
+    prompt_blacklist_strip: str = ""
+    # Comma-separated words that reject the whole Qwen/CLAP addition when matched.
+    prompt_blacklist_discard: str = ""
+    # Whether to strip first then check discard, or discard first then strip.
+    prompt_blacklist_order: Literal["strip_first", "discard_first"] = "strip_first"
     # When True, each entry must match as a whole word/phrase (``synth`` won't
     # match inside ``synthesizer``). When False, allow within-word substring hits.
     prompt_blacklist_whole_words: bool = True

@@ -3,8 +3,8 @@
   "group_collapsed": {
     "Audio": true,
     "Audio Reactive": true,
-    "Audio Routes": false,
-    "Beat Detection": false,
+    "Audio Routes": true,
+    "Beat Detection": true,
     "CLAP": true,
     "CLAP \u2014 Imagery": true,
     "CLAP \u2014 Imagery (tuning)": true,

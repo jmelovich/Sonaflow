@@ -393,6 +393,14 @@ class AnalyzerThread:
             beat_grid_lock=config.beat_grid_lock,
             beat_bpm_min=config.beat_bpm_min,
             beat_bpm_max=config.beat_bpm_max,
+            spectral_fft=config.react_spectral_fft,
+            adaptive_norm=config.react_adaptive_norm,
+            norm_range_db=config.react_norm_range_db,
+            norm_gate_db=config.react_norm_gate_db,
+            beat_adaptive_gate=config.beat_adaptive_gate,
+            beat_gate_k=config.beat_gate_k,
+            beat_octave_correct=config.beat_octave_correct,
+            beat_octave_lo=config.beat_octave_lo,
         )
         self._thread = threading.Thread(target=self._run, name="audio-analyzer", daemon=True)
 

@@ -312,8 +312,13 @@ class UIController:
                 ctx.pipeline.set_transform(**kw)
             return
 
-        if key.startswith("react_") and ctx.mapper is not None:
-            ctx.mapper.sync_from_config()
+        if key.startswith("react_"):
+            if ctx.mapper is not None:
+                ctx.mapper.sync_from_config()
+            # Feature-normalizer params (react_adaptive_norm / react_norm_*) live
+            # in the analyzer, not the routing mapper, so sync it too.
+            if ctx.analyzer_thread is not None:
+                ctx.analyzer_thread.sync_from_config(cfg)
             return
 
         if key.startswith("route") and ctx.mapper is not None:
@@ -405,8 +410,9 @@ class UIController:
         if self._bridge is None or not self._bridge._available:
             return
         blacklist_keys = {
-            "prompt_blacklist",
-            "prompt_blacklist_mode",
+            "prompt_blacklist_strip",
+            "prompt_blacklist_discard",
+            "prompt_blacklist_order",
             "prompt_blacklist_whole_words",
         }
         touched_blacklist = False

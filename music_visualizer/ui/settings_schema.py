@@ -210,15 +210,17 @@ _PROMPT_SPECS: Tuple[ParamSpec, ...] = (
                "click away to apply; updates the overlay base/prompt lines."),
     _s("negative_prompt", "Negative prompt", "Prompt", ParamKind.TEXT,
        tooltip="Terms to suppress in generation. Applied on next encode/restart."),
-    _s("prompt_blacklist", "Prompt blacklist", "Prompt", ParamKind.TEXT,
-       tooltip="Comma-separated words or phrases to filter from Qwen captions and CLAP tags "
+    _s("prompt_blacklist_strip", "Strip blacklist", "Prompt", ParamKind.TEXT,
+       tooltip="Comma-separated words or phrases to remove from Qwen captions and CLAP tags "
                "(not the base prompt). Multi-word entries like 'electric guitar' are supported. "
                "Whole-word/phrase match, case-insensitive."),
-    _s("prompt_blacklist_mode", "Blacklist mode", "Prompt", ParamKind.ENUM,
-       options=("strip", "discard"),
-       tooltip="strip = remove matched words from Qwen/CLAP additions; "
-               "discard = reject the whole addition and keep the current prompt. "
-               "Never filters the base prompt."),
+    _s("prompt_blacklist_discard", "Discard blacklist", "Prompt", ParamKind.TEXT,
+       tooltip="Comma-separated words or phrases that reject the whole Qwen/CLAP addition "
+               "when matched (keeps the current prompt). Never filters the base prompt."),
+    _s("prompt_blacklist_order", "Blacklist order", "Prompt", ParamKind.ENUM,
+       options=("strip_first", "discard_first"),
+       tooltip="strip_first = remove strip-list matches, then check discard list; "
+               "discard_first = check discard list on the original text, then strip."),
     _s("prompt_blacklist_whole_words", "Blacklist whole words", "Prompt", ParamKind.BOOL,
        tooltip="On: each entry must match as a whole word/phrase (synth won't "
                "match inside synthesizer). Off: allow substring matches anywhere."),
@@ -373,7 +375,11 @@ _AUDIO_SPECS: Tuple[ParamSpec, ...] = (
        tooltip="Analysis block size in samples (~12ms at 512/44100)."),
     _s("fft_size", "FFT size", "Audio", ParamKind.INT,
        min_val=512, max_val=8192, step=256, requires_restart=True,
-       tooltip="FFT window for aubio (must be >= hop size)."),
+       tooltip="aubio tempo/onset FFT window (must be >= hop size). Keep small for tight beat timing."),
+    _s("react_spectral_fft", "Spectral FFT size", "Audio", ParamKind.INT,
+       min_val=0, max_val=16384, step=256, requires_restart=True,
+       tooltip="Separate FFT for band energies/centroid (power of two >= hop). "
+               "Larger = sharper bass resolution without hurting beat timing. 0 = use FFT size."),
     _s("reactive", "Audio-reactive motion", "Audio", ParamKind.BOOL,
        tooltip="Map audio features to zoom/pan/rotate/noise. Off keeps manual motion only."),
 )
@@ -396,6 +402,20 @@ _BEAT_SPECS: Tuple[ParamSpec, ...] = (
     _s("beat_bpm_smoothing", "BPM smoothing", "Beat Detection", ParamKind.FLOAT,
        min_val=0.01, max_val=1.0, step=0.01,
        tooltip="EMA rate when aubio reports a new BPM on a beat."),
+    _s("beat_adaptive_gate", "Adaptive beat gate", "Beat Detection", ParamKind.BOOL,
+       tooltip="Confirm each aubio beat against a rolling onset threshold; rejects false "
+               "beats on weak/steady content. Lets one setting work across songs."),
+    _s("beat_gate_k", "Beat gate strictness", "Beat Detection", ParamKind.FLOAT,
+       min_val=0.0, max_val=3.0, step=0.05,
+       tooltip="Onset must exceed median + k*MAD to count as a beat. Higher = stricter "
+               "(fewer beats); lower = more permissive. Only used when the gate is on."),
+    _s("beat_octave_correct", "Octave correction", "Beat Detection", ParamKind.BOOL,
+       tooltip="Fold aubio's BPM into one octave so half/double-tempo estimates don't "
+               "make BPM-driven motion jump."),
+    _s("beat_octave_lo", "Octave low BPM", "Beat Detection", ParamKind.FLOAT,
+       min_val=50.0, max_val=140.0, step=1.0,
+       tooltip="Low edge of the preferred octave; BPM folds into [this, 2x this). "
+               "90 -> 90-180 covers most dance/pop."),
 )
 
 _REACTIVE_SPECS: Tuple[ParamSpec, ...] = (
@@ -446,7 +466,18 @@ _REACTIVE_SPECS: Tuple[ParamSpec, ...] = (
        tooltip="Angular speed of orbit_sin/orbit_cos sources (rad/s)."),
     _s("react_norm_decay", "Norm decay", "Audio Reactive", ParamKind.FLOAT,
        min_val=0.9, max_val=1.0, step=0.001,
-       tooltip="Rolling-peak decay for feature normalization."),
+       tooltip="Peak/ceiling release rate for feature normalization (near 1 = slow)."),
+    _s("react_adaptive_norm", "Adaptive normalize", "Audio Reactive", ParamKind.BOOL,
+       tooltip="dB-window normalization with a silence gate. Fixes the legacy peak "
+               "normalizer's stale-peak fade and silence blow-up. Off = legacy peak."),
+    _s("react_norm_range_db", "Norm range (dB)", "Audio Reactive", ParamKind.FLOAT,
+       min_val=12.0, max_val=90.0, step=1.0,
+       tooltip="Dynamic-range window below the tracked ceiling mapped to 0..1. "
+               "Smaller = punchier/more contrast; larger = smoother. Adaptive mode only."),
+    _s("react_norm_gate_db", "Norm gate (dB)", "Audio Reactive", ParamKind.FLOAT,
+       min_val=-100.0, max_val=-20.0, step=1.0,
+       tooltip="When the tracked ceiling falls below this, output is 0 (treated as "
+               "silence). Raise toward -50 if quiet passages still jitter. Adaptive only."),
 )
 
 _CENTERING_SPECS: Tuple[ParamSpec, ...] = (
@@ -661,7 +692,7 @@ def ui_value_to_config(spec: ParamSpec, raw: Any) -> Any:
     if spec.key in ("engine_dir", "rtx_video_sdk_path", "clap_vocabs_dir",
                     "qwen_python", "audio_file", "react_routes_path") and not str(raw or "").strip():
         return None
-    if spec.key == "prompt_blacklist_mode":
-        from music_visualizer.utils.text import normalize_blacklist_mode
-        return normalize_blacklist_mode(str(raw))
+    if spec.key == "prompt_blacklist_order":
+        from music_visualizer.utils.text import normalize_blacklist_order
+        return normalize_blacklist_order(str(raw))
     return str(raw)

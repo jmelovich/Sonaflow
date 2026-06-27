@@ -28,10 +28,30 @@ def _valid_config_keys() -> frozenset[str]:
     return frozenset(f.name for f in fields(Config))
 
 
+def _migrate_prompt_blacklist(data: dict[str, Any]) -> dict[str, Any]:
+    """Map legacy single blacklist + mode to strip/discard lists."""
+    if "prompt_blacklist" not in data:
+        return data
+    migrated = dict(data)
+    legacy = str(migrated.get("prompt_blacklist") or "")
+    mode = str(migrated.get("prompt_blacklist_mode") or "strip").strip().lower()
+    if "prompt_blacklist_strip" not in migrated and "prompt_blacklist_discard" not in migrated:
+        if mode == "discard":
+            migrated["prompt_blacklist_discard"] = legacy
+            migrated["prompt_blacklist_strip"] = ""
+        else:
+            migrated["prompt_blacklist_strip"] = legacy
+            migrated["prompt_blacklist_discard"] = ""
+    migrated.pop("prompt_blacklist", None)
+    migrated.pop("prompt_blacklist_mode", None)
+    return migrated
+
+
 def filter_config_dict(data: dict[str, Any]) -> dict[str, Any]:
     """Drop unknown keys (e.g. removed CLAP fields from older settings files)."""
     valid = _valid_config_keys()
-    return {k: v for k, v in data.items() if k in valid}
+    migrated = _migrate_prompt_blacklist(data)
+    return {k: v for k, v in migrated.items() if k in valid}
 
 
 def _config_to_dict(cfg: Config) -> dict[str, Any]:

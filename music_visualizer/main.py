@@ -1197,8 +1197,9 @@ def _start_clap(
     )
     builder = MultiPromptBuilder(
         base_prompt=cfg.prompt,
-        prompt_blacklist=cfg.prompt_blacklist,
-        prompt_blacklist_mode=cfg.prompt_blacklist_mode,
+        prompt_blacklist_strip=cfg.prompt_blacklist_strip,
+        prompt_blacklist_discard=cfg.prompt_blacklist_discard,
+        prompt_blacklist_order=cfg.prompt_blacklist_order,
         prompt_blacklist_whole_words=cfg.prompt_blacklist_whole_words,
     )
     builder.sync_from_lists(lists)

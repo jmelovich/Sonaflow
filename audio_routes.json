@@ -7,7 +7,7 @@
       "target": "zoom",
       "curve": 1.0,
       "mode": "add",
-      "gain": 0.016200000420212746,
+      "gain": 0.004999999888241291,
       "enable": true,
       "label": "Bass -> Zoom",
       "tooltip": "Bass energy adds a steady forward zoom.",

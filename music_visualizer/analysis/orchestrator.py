@@ -82,8 +82,9 @@ class PromptOrchestrator:
     def sync_blacklist_from_config(self, cfg: Config) -> None:
         self.config = cfg
         self._builder.apply_blacklist(
-            cfg.prompt_blacklist,
-            cfg.prompt_blacklist_mode,
+            cfg.prompt_blacklist_strip,
+            cfg.prompt_blacklist_discard,
+            cfg.prompt_blacklist_order,
             whole_words=cfg.prompt_blacklist_whole_words,
         )
 
@@ -102,8 +103,9 @@ class PromptOrchestrator:
             return ""
         filtered = filter_prompt_addition(
             caption,
-            self.config.prompt_blacklist,
-            self.config.prompt_blacklist_mode,
+            strip_blacklist=self.config.prompt_blacklist_strip,
+            discard_blacklist=self.config.prompt_blacklist_discard,
+            order=self.config.prompt_blacklist_order,
             whole_words=self.config.prompt_blacklist_whole_words,
         )
         return (filtered or "").strip()

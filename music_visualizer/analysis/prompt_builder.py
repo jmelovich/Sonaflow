@@ -27,15 +27,14 @@ from dataclasses import dataclass, field
 from typing import Dict, Iterable, List, Literal, Optional, Tuple
 
 from music_visualizer.utils.text import (
-    apply_prompt_blacklist,
-    normalize_blacklist_mode,
+    PromptFilterResult,
+    apply_prompt_blacklists,
     parse_prompt_blacklist,
-    prompt_matches_blacklist,
 )
 
 TagDetail = Tuple[str, float, float]  # (phrase, compel_weight, smoothed_score)
 
-PromptBlacklistMode = Literal["discard", "strip"]
+PromptBlacklistOrder = Literal["strip_first", "discard_first"]
 
 
 def _ema_alpha(dt: float, tau: float) -> float:
@@ -56,8 +55,9 @@ class PromptBuilder:
     weight_step: float = 0.1        # quantize weights so tiny EMA drift doesn't
                                     # re-trigger a (costly) prompt re-encode each cycle
     max_tags: int = 3
-    prompt_blacklist: str = ""
-    prompt_blacklist_mode: PromptBlacklistMode = "strip"
+    prompt_blacklist_strip: str = ""
+    prompt_blacklist_discard: str = ""
+    prompt_blacklist_order: PromptBlacklistOrder = "strip_first"
     prompt_blacklist_whole_words: bool = True
 
     _scores: Dict[str, float] = field(default_factory=dict, init=False)
@@ -74,19 +74,22 @@ class PromptBuilder:
 
     def apply_blacklist(
         self,
-        blacklist: str,
-        mode: PromptBlacklistMode,
+        strip_blacklist: str,
+        discard_blacklist: str,
+        order: PromptBlacklistOrder,
         *,
         whole_words: bool = True,
     ) -> bool:
         """Update blacklist settings; return True when compose output may change."""
         changed = (
-            self.prompt_blacklist != blacklist
-            or self.prompt_blacklist_mode != mode
+            self.prompt_blacklist_strip != strip_blacklist
+            or self.prompt_blacklist_discard != discard_blacklist
+            or self.prompt_blacklist_order != order
             or self.prompt_blacklist_whole_words != whole_words
         )
-        self.prompt_blacklist = blacklist
-        self.prompt_blacklist_mode = mode
+        self.prompt_blacklist_strip = strip_blacklist
+        self.prompt_blacklist_discard = discard_blacklist
+        self.prompt_blacklist_order = order
         self.prompt_blacklist_whole_words = whole_words
         if changed:
             self._last_composed = None
@@ -133,6 +136,15 @@ class PromptBuilder:
         self._last_composed = composed
         return composed
 
+    def _filter_phrase(self, phrase: str) -> PromptFilterResult:
+        return apply_prompt_blacklists(
+            phrase,
+            strip_terms=parse_prompt_blacklist(self.prompt_blacklist_strip),
+            discard_terms=parse_prompt_blacklist(self.prompt_blacklist_discard),
+            order=self.prompt_blacklist_order,
+            whole_words=self.prompt_blacklist_whole_words,
+        )
+
     def _compose(self) -> str:
         # Keep the strongest active tags, capped at ``max_tags``.
         ranked = sorted(
@@ -140,29 +152,15 @@ class PromptBuilder:
         )[: self.max_tags]
         if not ranked:
             return self.base_prompt
-        terms = parse_prompt_blacklist(self.prompt_blacklist)
-        mode = normalize_blacklist_mode(self.prompt_blacklist_mode)
-        if mode == "discard":
-            for phrase in ranked:
-                if prompt_matches_blacklist(
-                    phrase,
-                    terms,
-                    whole_words=self.prompt_blacklist_whole_words,
-                ):
-                    if self._last_composed is not None:
-                        return self._last_composed
-                    return self.base_prompt
         parts = [self.base_prompt]
         for phrase in ranked:
-            filtered = apply_prompt_blacklist(
-                phrase,
-                terms,
-                mode,
-                whole_words=self.prompt_blacklist_whole_words,
-            )
-            if not filtered:
-                continue
-            parts.append(f"({filtered}){self._weight_for(phrase):.2f}")
+            filtered = self._filter_phrase(phrase)
+            if filtered.outcome == "discard":
+                if self._last_composed is not None:
+                    return self._last_composed
+                return self.base_prompt
+            if filtered.text:
+                parts.append(f"({filtered.text}){self._weight_for(phrase):.2f}")
         if len(parts) == 1:
             return self.base_prompt
         return ", ".join(parts)
@@ -202,29 +200,16 @@ class PromptBuilder:
 
     def weighted_tag_parts(self) -> List[str]:
         """Compel-weighted tag strings without the base prompt."""
-        terms = parse_prompt_blacklist(self.prompt_blacklist)
-        mode = normalize_blacklist_mode(self.prompt_blacklist_mode)
         ranked = sorted(
             self._active.keys(), key=lambda p: self._scores.get(p, 0.0), reverse=True
         )[: self.max_tags]
-        if mode == "discard":
-            for phrase in ranked:
-                if prompt_matches_blacklist(
-                    phrase,
-                    terms,
-                    whole_words=self.prompt_blacklist_whole_words,
-                ):
-                    return []
         parts: List[str] = []
         for phrase in ranked:
-            filtered = apply_prompt_blacklist(
-                phrase,
-                terms,
-                mode,
-                whole_words=self.prompt_blacklist_whole_words,
-            )
-            if filtered:
-                parts.append(f"({filtered}){self._weight_for(phrase):.2f}")
+            filtered = self._filter_phrase(phrase)
+            if filtered.outcome == "discard":
+                return []
+            if filtered.text:
+                parts.append(f"({filtered.text}){self._weight_for(phrase):.2f}")
         return parts
 
 
@@ -235,8 +220,9 @@ class MultiPromptBuilder:
     base_prompt: str
     channel_order: List[str] = field(default_factory=list)
     builders: Dict[str, PromptBuilder] = field(default_factory=dict, init=False)
-    prompt_blacklist: str = ""
-    prompt_blacklist_mode: PromptBlacklistMode = "strip"
+    prompt_blacklist_strip: str = ""
+    prompt_blacklist_discard: str = ""
+    prompt_blacklist_order: PromptBlacklistOrder = "strip_first"
     prompt_blacklist_whole_words: bool = True
     _last_composed: Optional[str] = field(default=None, init=False)
 
@@ -249,21 +235,26 @@ class MultiPromptBuilder:
 
     def apply_blacklist(
         self,
-        blacklist: str,
-        mode: PromptBlacklistMode,
+        strip_blacklist: str,
+        discard_blacklist: str,
+        order: PromptBlacklistOrder,
         *,
         whole_words: bool = True,
     ) -> bool:
         changed = (
-            self.prompt_blacklist != blacklist
-            or self.prompt_blacklist_mode != mode
+            self.prompt_blacklist_strip != strip_blacklist
+            or self.prompt_blacklist_discard != discard_blacklist
+            or self.prompt_blacklist_order != order
             or self.prompt_blacklist_whole_words != whole_words
         )
-        self.prompt_blacklist = blacklist
-        self.prompt_blacklist_mode = mode
+        self.prompt_blacklist_strip = strip_blacklist
+        self.prompt_blacklist_discard = discard_blacklist
+        self.prompt_blacklist_order = order
         self.prompt_blacklist_whole_words = whole_words
         for builder in self.builders.values():
-            builder.apply_blacklist(blacklist, mode, whole_words=whole_words)
+            builder.apply_blacklist(
+                strip_blacklist, discard_blacklist, order, whole_words=whole_words
+            )
         if changed:
             self._last_composed = None
         return changed
@@ -299,8 +290,9 @@ class MultiPromptBuilder:
                     weight_max=vl.weight_max,
                     weight_step=vl.weight_step,
                     max_tags=vl.max_tags,
-                    prompt_blacklist=self.prompt_blacklist,
-                    prompt_blacklist_mode=self.prompt_blacklist_mode,
+                    prompt_blacklist_strip=self.prompt_blacklist_strip,
+                    prompt_blacklist_discard=self.prompt_blacklist_discard,
+                    prompt_blacklist_order=self.prompt_blacklist_order,
                     prompt_blacklist_whole_words=self.prompt_blacklist_whole_words,
                 )
         self.builders = new_builders

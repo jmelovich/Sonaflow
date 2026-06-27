@@ -766,6 +766,12 @@ LRESULT CALLBACK wnd_proc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
                 else if (wp == VK_F11) toggle_fullscreen();
             }
             return 0;
+        case WM_SYSCOMMAND:
+            // Alt alone activates the system menu and blocks inside DefWindowProc
+            // until dismissed -- freezing the present loop on the render thread.
+            if ((wp & 0xfff0) == SC_KEYMENU)
+                return 0;
+            break;
         case WM_SIZE:
             g_clientW = LOWORD(lp);
             g_clientH = HIWORD(lp);
